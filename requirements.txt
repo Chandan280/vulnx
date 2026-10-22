@@ -1,0 +1,2 @@
+# PDF export dependency verified in the initial development environment.
+reportlab==5.0.1
