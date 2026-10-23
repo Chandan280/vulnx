@@ -68,3 +68,19 @@ class ResetTests(unittest.TestCase):
         h.do_POST()
         self.assertEqual(h.response[0],403)
         self.assertEqual(len(server.state()['assets']),1)
+
+    def test_reset_through_http_with_real_session(self):
+        import urllib.request,http.cookiejar
+        httpd=server.ThreadingHTTPServer(('127.0.0.1',0),server.Handler)
+        worker=threading.Thread(target=httpd.serve_forever,daemon=True);worker.start()
+        try:
+            jar=http.cookiejar.CookieJar()
+            client=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+            base='http://127.0.0.1:'+str(httpd.server_port)+'/api/'
+            session=json.load(client.open(base+'session'))
+            self.assertIn('vulnx_session_'+str(httpd.server_port),[c.name for c in jar])
+            request=urllib.request.Request(base+'workspace/clear',data=json.dumps({'confirmation':'DELETE ALL DATA'}).encode(),headers={'Content-Type':'application/json','X-VulnX-CSRF':session['csrf']})
+            self.assertTrue(json.load(client.open(request))['ok'])
+            self.assertEqual(json.load(client.open(base+'state')),{'assets':[],'scans':[],'findings':[]})
+        finally:
+            httpd.shutdown();httpd.server_close();worker.join()

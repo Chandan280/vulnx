@@ -106,10 +106,18 @@ class HTTPGuards(unittest.TestCase):
         h=self.handler({'Host':'127.0.0.1:8787','Origin':'https://attacker.example'})
         self.assertFalse(h.allowed(mutation=True))
 
+    def test_sessions_are_isolated_by_port(self):
+        h=self.handler({'Host':'127.0.0.1:8787','Cookie':'vulnx_session_8788='+server.TOKEN,'X-VulnX-CSRF':server.TOKEN})
+        self.assertFalse(h.allowed(mutation=True))
+        self.assertEqual(h.response[1]['code'],'session_expired')
+        self.assertEqual(h.session_cookie_name(),'vulnx_session_8787')
+        h.server.server_port=8788
+        self.assertEqual(h.session_cookie_name(),'vulnx_session_8788')
+
     def test_mutation_requires_session_and_csrf(self):
         h=self.handler({'Host':'127.0.0.1:8787'})
         self.assertFalse(h.allowed(mutation=True))
-        h=self.handler({'Host':'127.0.0.1:8787','Cookie':'vulnx_session='+server.TOKEN,'X-VulnX-CSRF':server.TOKEN})
+        h=self.handler({'Host':'127.0.0.1:8787','Cookie':'vulnx_session_8787='+server.TOKEN,'X-VulnX-CSRF':server.TOKEN})
         self.assertTrue(h.allowed(mutation=True))
 
 

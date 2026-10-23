@@ -39,3 +39,7 @@ Earlier GitHub authentication, network, socket and browser blockers are resolved
 - Initial TLS subcheck failure was preserved as partial; reduced-concurrency SSLyze mode passed focused and complete reruns.
 - User-requested data reset completed. API and database verified empty; validation evidence and NVD cache removed. Aggregate verification report retained in docs/TEST_REPORT.md and delivered with the user guide as a PDF.
 - Original expanded scope limitations remain documented; do not claim OS fingerprinting or external active scans are implemented.
+
+## Reset session fix
+
+Fixed cross-port browser cookie collisions between local instances on 8787 and 8788. Session cookies now include the port; the frontend refreshes an expired mutation session once. Clear-data errors appear beside its button, active-job blocking is explicit, and surrounding confirmation whitespace is tolerated. 34 tests passed, including a real HTTP reset against an isolated temporary database; frontend build passed. Current user findings were preserved.

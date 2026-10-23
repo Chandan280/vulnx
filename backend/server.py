@@ -252,11 +252,15 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Referrer-Policy', 'no-referrer')
         self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         if cookie:
-            self.send_header('Set-Cookie', 'vulnx_session=' + TOKEN + '; HttpOnly; SameSite=Strict; Path=/')
+            self.send_header('Set-Cookie', self.session_cookie_name() + '=' + TOKEN + '; HttpOnly; SameSite=Strict; Path=/')
         if download:
             self.send_header('Content-Disposition', 'attachment; filename="' + download + '"')
         self.end_headers()
         self.wfile.write(raw)
+
+    def session_cookie_name(self):
+        # Cookies are shared across ports; isolate each local server session.
+        return 'vulnx_session_' + str(self.server.server_port)
 
     def allowed(self, mutation=False):
         host = self.headers.get('Host', '')
@@ -268,8 +272,8 @@ class Handler(BaseHTTPRequestHandler):
         if origin and origin != 'http://' + host:
             self.reply(403, {'error': 'Cross-origin request rejected.'})
             return False
-        if mutation and (self.headers.get('X-VulnX-CSRF') != TOKEN or ('vulnx_session=' + TOKEN) not in self.headers.get('Cookie', '').split('; ')):
-            self.reply(403, {'error': 'Refresh the local workspace session.'})
+        if mutation and (self.headers.get('X-VulnX-CSRF') != TOKEN or (self.session_cookie_name() + '=' + TOKEN) not in self.headers.get('Cookie', '').split('; ')):
+            self.reply(403, {'error': 'Refresh the local workspace session.', 'code': 'session_expired'})
             return False
         return True
 
@@ -279,7 +283,7 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == '/api/session':
             return self.reply(200, {'csrf': TOKEN}, cookie=True)
-        if path.startswith('/api/') and ('vulnx_session=' + TOKEN) not in self.headers.get('Cookie', '').split('; '):
+        if path.startswith('/api/') and (self.session_cookie_name() + '=' + TOKEN) not in self.headers.get('Cookie', '').split('; '):
             return self.reply(401, {'error': 'Open the local workspace first.'})
         if path == '/api/state':
             return self.reply(200, state())
