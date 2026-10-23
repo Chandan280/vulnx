@@ -67,13 +67,13 @@ class StorageAndReports(unittest.TestCase):
 
     def test_restart_marks_unfinished_jobs_failed(self):
         with server.connection() as db:
-            db.execute('INSERT INTO scans VALUES (?,?,?,?,?,?,?,?,?)',('test','asset','example.com','','running','Querying SPF',server.now(),None,None))
+            db.execute('INSERT INTO scans(id,asset_id,domain,selector,status,stage,created,finished,result) VALUES (?,?,?,?,?,?,?,?,?)',('test','asset','example.com','','running','Querying SPF',server.now(),None,None))
         server.initialize()
         self.assertEqual(server.state()['scans'][0]['status'],'failed')
 
     def test_real_worker_persists_failed_dns_without_findings(self):
         with server.connection() as db:
-            db.execute('INSERT INTO scans VALUES (?,?,?,?,?,?,?,?,?)',('test','asset','example.com','','queued','Waiting',server.now(),None,None))
+            db.execute('INSERT INTO scans(id,asset_id,domain,selector,status,stage,created,finished,result) VALUES (?,?,?,?,?,?,?,?,?)',('test','asset','example.com','','queued','Waiting',server.now(),None,None))
         result={'status':'failed','checks':[],'findings':[],'limitations':['Resolver unavailable']}
         with patch.object(server,'assess',return_value=result):
             server.execute_scan('test','example.com','',threading.Event())

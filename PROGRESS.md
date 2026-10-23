@@ -1,26 +1,32 @@
-# Progress
+# VulnX progress — 23 October 2026 (Asia/Kolkata)
 
-## Implemented milestone 0.1
+## Completed
 
-Premium local React dashboard and real DNS-assessment pipeline, local SQLite persistence, inspection of actual evidence, PDF/JSON exports, cancellation and honest failed/skipped checks. The app starts empty. Future scanner modules are labeled as pending.
+Local React app; actual email DNS, HTTP header, Nmap, SSLyze and active ZAP lab integrations; SQLite history; deduplicated findings/review states; comparable configuration retests; NVD lookup/CPE candidate matching; PDF/JSON reports; controlled vulnerable/corrected lab.
+
+Private GitHub repository created and verified: https://github.com/Chandan280/vulnx. Initial commit dec9f56 matched remote main. Milestones are committed and pushed after verification.
+
+## Observed results
+
+- Actual DNS queries detected permissive SPF, monitoring-only DMARC and the revoked test DKIM selector.
+- Actual HTTP checks detected missing CSP and nosniff headers.
+- Nmap returned real service inventory from local lab ports; open ports were not labeled vulnerabilities.
+- SSLyze flagged the deliberately self-signed TLS certificate as untrusted.
+- Official ZAP 2.17.0 download checksum verified. Real active scans detected reflected XSS and SQL injection in the vulnerable fixture.
+- App/API integration completed all five profiles; its ZAP run returned 16 alert occurrences (crawl/timing can change counts).
+- Correcting the lab and repeating email/HTTP checks verified four configuration fixes.
+- NVD returned the actual CVE-2021-44228 record. Querying the version fingerprint cpe:/a:apache:log4j:2.14.1 returned source-backed candidate associations. This is intelligence retrieval, not a target applicability confirmation.
+- Real PDF/JSON exports downloaded through the API and passed signature/identity checks.
+- Browser inspection confirmed real readiness, scan history and XSS/SQLi evidence. Desktop document and viewport widths matched at 1440px, with no horizontal document overflow.
+
+- Final verification: all 27 unit tests pass and the production frontend builds. A running real ZAP job was cancelled through the API and reached cancelled status.
+- Both pages of the exported PDF were rendered and visually inspected; no clipping observed. Generic check status wording corrected.
+- Dashboard severity totals now derive from actual open findings; browser confirmed the counts and cancelled assessment state.
+
+## Remaining scope
+
+Multi-user authentication/roles and worker isolation; PostgreSQL/FastAPI migration; arbitrary external active scanning with stronger isolation; authenticated scans; privileged OS fingerprinting; complete email standards evaluation; optional AI. These are not claimed as implemented.
 
 ## Environment
 
-- Mac tools present: Node 24, Python 3.14, dig, Nmap, Git and gh. Nmap integration is not implemented.
-- Frontend dependencies installed from an existing local npm cache. No paid services.
-- External package requests cannot resolve registry.npmjs.org in this execution environment. Actual dig execution returned `bind: Operation not permitted`; live network checks are not verified.
-- GitHub CLI reports an invalid login for Chandan280. Private repository creation and push are pending reauthentication and network access.
-- Codex app task creation interface failed; implementation proceeded directly in the current workspace.
-
-## Remaining
-
-Run the server and review in a browser where socket binding is allowed. Validate actual authorized-domain DNS, cancellation and exports end to end. Then add multi-user architecture and the remaining scanners in measured milestones. Do not describe this initial milestone as the complete capstone.
-
-## Executed checks
-
-- `npm run build`: TypeScript checking and Vite production build succeeded.
-- `python3 -m unittest discover -s tests -v`: 14 tests passed. Includes DNS fixtures, failure semantics, cancellation, SQLite persistence/restart recovery, PDF output and host/origin/CSRF guards.
-- `python3 backend/server.py`: attempted; operating-system sandbox denied socket binding with `PermissionError: [Errno 1] Operation not permitted`. No browser or HTTP end-to-end verification is claimed.
-- Actual `dig` invocation: operating-system sandbox denied socket binding. No live successful DNS result is claimed.
-
-Start the application from a normal local terminal to complete browser and live-network verification. The source repository and initial local commit are available; GitHub is not synchronized yet.
+Earlier GitHub authentication, network, socket and browser blockers are resolved. The separate Codex-task interface still failed; development is proceeding directly in this repository. Work is not claimed to continue automatically after the active session ends.

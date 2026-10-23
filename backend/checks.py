@@ -57,7 +57,10 @@ def parse_dns(stdout, stderr='', returncode=0):
 
 def lookup(name, cancelled):
     try:
-        proc = subprocess.Popen(['dig', '+time=3', '+tries=1', '+noall', '+comments', '+answer', name, 'TXT'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        args = ['dig', '+time=3', '+tries=1', '+noall', '+comments', '+answer']
+        if name.endswith('.vulnx.test'):
+            args += ['@127.0.0.1', '-p', '15353']
+        proc = subprocess.Popen(args + [name, 'TXT'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     except OSError as exc:
         return {'status': 'error', 'records': [], 'error': str(exc)}
     import time
@@ -91,7 +94,7 @@ def assess(domain, selector, cancelled, update=lambda stage: None, resolver=look
         update('Querying ' + protocol)
         answer = resolver(name, cancelled)
         relevant = [r for r in answer['records'] if prefix is None or r.lower().startswith(prefix)]
-        check = {'protocol': protocol, 'query': name, **answer, 'assessment': 'Not assessed'}
+        check = {'protocol': protocol, 'query': name, **answer, 'assessment': 'Not assessed', 'resolver': 'Local controlled lab 127.0.0.1:15353' if name.endswith('.vulnx.test') else 'System DNS resolver'}
         checks.append(check)
         if answer['status'] == 'error':
             continue

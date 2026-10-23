@@ -1,2 +1,5 @@
-# PDF export dependency verified in the initial development environment.
-reportlab==5.0.1
+# Runtime dependencies verified on this Apple Silicon development machine.
+reportlab==5.1.0
+sslyze==6.3.1
+dnspython==2.9.0
+cryptography==46.0.7
