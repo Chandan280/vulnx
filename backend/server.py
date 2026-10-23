@@ -30,6 +30,7 @@ TOKEN = secrets.token_urlsafe(32)
 POOL = ThreadPoolExecutor(max_workers=1)
 EVENTS = {}
 LOCK = threading.Lock()
+WORKSPACE_LOCK = threading.RLock()
 
 
 def now():
@@ -74,6 +75,33 @@ def state():
     for scan in scans:
         scan['result'] = json.loads(scan['result']) if scan['result'] else None
     return {'assets': assets, 'scans': scans, 'findings':findings}
+
+
+def clear_workspace(confirmation):
+    """Serialize reset with job submission; never erase a live worker's records."""
+    if confirmation != 'DELETE ALL DATA':
+        raise ValueError('Type DELETE ALL DATA to confirm permanent removal.')
+    with WORKSPACE_LOCK:
+        with LOCK:
+            if EVENTS:
+                raise ValueError('Cancel or finish all assessments before clearing data.')
+        with connection() as db:
+            if db.execute("SELECT count(*) FROM scans WHERE status IN ('queued','running')").fetchone()[0]:
+                raise ValueError('Cancel or finish all assessments before clearing data.')
+            db.execute('PRAGMA secure_delete=ON')
+            counts={table:db.execute('SELECT count(*) FROM '+table).fetchone()[0] for table in ('assets','scans','findings','occurrences','audit')}
+            for table in ('occurrences','findings','scans','assets','audit'):
+                db.execute('DELETE FROM '+table)
+        # Only application-owned generated evidence; installed tools are preserved.
+        for name in ('validation','nvd'):
+            path=DATA/name
+            if path.is_symlink():path.unlink()
+            elif path.exists():shutil.rmtree(path)
+        for path in DATA.glob('*-validation.json'):
+            path.unlink()
+        with connection() as db:
+            db.execute('VACUUM')
+        return {'ok':True,'deleted':counts,'note':'Workspace cleared. Exported downloads and system backups are outside this app.'}
 
 
 def reconcile(scan_id,result):
@@ -259,7 +287,9 @@ class Handler(BaseHTTPRequestHandler):
             util=__import__('importlib.util',fromlist=['find_spec'])
             return self.reply(200, {'dns':bool(shutil.which('dig')),'nmap':bool(shutil.which('nmap')),'tls':util.find_spec('sslyze') is not None,'zap':(ROOT/'.runtime/tools/ZAP_2.17.0/zap.sh').exists(),'pdf':util.find_spec('reportlab') is not None,'mode':'Single-user local workspace','network':'Installed dependencies only; actual outcomes are recorded by each assessment.'})
         if path.startswith('/api/cve/'):
-            try:return self.reply(200,intelligence.lookup(path.rsplit('/',1)[-1].upper()))
+            try:
+                with WORKSPACE_LOCK:
+                    return self.reply(200,intelligence.lookup(path.rsplit('/',1)[-1].upper()))
             except ValueError as exc:return self.reply(400,{'error':str(exc)})
             except Exception:return self.reply(503,{'error':'NVD is unavailable or rate limited. Try again later; no intelligence was invented.'})
         if path.startswith('/api/reports/'):
@@ -290,6 +320,10 @@ class Handler(BaseHTTPRequestHandler):
         self.reply(200, file.read_bytes(), mimetypes.guess_type(file)[0] or 'application/octet-stream')
 
     def do_POST(self):
+        with WORKSPACE_LOCK:
+            self.handle_post()
+
+    def handle_post(self):
         if not self.allowed(mutation=True):
             return
         try:
@@ -300,6 +334,8 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 raise ValueError('Expected an object.')
             path = urlparse(self.path).path
+            if path == '/api/workspace/clear':
+                return self.reply(200,clear_workspace(body.get('confirmation')))
             if path == '/api/assets':
                 if body.get('authorized') is not True:
                     raise ValueError('Confirm that this target is authorized.')

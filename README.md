@@ -17,6 +17,14 @@ npm run build
 
 Open **http://127.0.0.1:8787**. Frontend and API share one origin. `npm run dev` rebuilds assets on change; refresh the page afterward. The ZAP installer downloads the pinned official 2.17.0 cross-platform release and verifies its SHA-256 digest before extraction (approximately 273 MiB). Tool downloads and runtime data are ignored by Git.
 
+## Daily use and data reset
+
+After installation and building, start the app and lab together with `.venv/bin/python scripts/start_local.py --lab`. Keep the terminal open; Ctrl+C stops the processes. Settings includes an operating guide.
+
+Settings → Clear workspace data permanently removes stored targets, scans, findings, reviews, audit history, cached intelligence and generated validation evidence. Type `DELETE ALL DATA` to enable it. Active/queued scans block reset. Installed tools and lab configuration remain; separately downloaded reports and backups are outside its scope. Export reports first.
+
+See [User guide](docs/USER_GUIDE.md) and [Test report](docs/TEST_REPORT.md).
+
 ## Real local lab
 
 In a second terminal:

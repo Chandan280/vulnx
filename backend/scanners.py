@@ -108,7 +108,9 @@ def web(value,event,update):
     if parsed.scheme=='https':required.append(('strict-transport-security','Missing HTTP Strict Transport Security','Low','After confirming HTTPS coverage, configure an appropriate Strict-Transport-Security policy.'))
     for header,title,severity,fix in required:
         if not headers.get(header,'').strip() or (header=='x-content-type-options' and headers[header].strip().lower()!='nosniff'):
-            findings.append(finding(title,severity,f'GET {value} returned HTTP {status} without {header}.',fix,'http-'+header,endpoint=value))
+            observed=headers.get(header,'').strip()
+            evidence=f'GET {value} returned HTTP {status}; {header}: {observed!r}.' if observed else f'GET {value} returned HTTP {status} without {header}.'
+            findings.append(finding(title.replace('Missing','Invalid') if observed else title,severity,evidence,fix,'http-'+header,endpoint=value))
     return result(checks,findings,limits,tool={'name':'VulnX HTTP checks','version':'0.2'},coverage={'endpoint':value,'http_status':status,'rule_set':'http-headers-0.2','content_assessed':True},body_sha256=hashlib.sha256(body).hexdigest())
 
 
@@ -117,7 +119,7 @@ def tls(value,event,update):
     update('SSLyze: inspecting TLS configuration')
     with tempfile.TemporaryDirectory(dir=ROOT/'.runtime') as folder:
         output=Path(folder)/'tls.json'
-        command([sys.executable,'-m','sslyze','--mozilla_config','disable','--certinfo','--tlsv1','--tlsv1_1','--tlsv1_2','--tlsv1_3','--sni',parsed.hostname,'--json_out',str(output),f'{parsed.hostname}:{parsed.port}{{{ip}}}'],event,180)
+        command([sys.executable,'-m','sslyze','--mozilla_config','disable','--slow_connection','--certinfo','--tlsv1','--tlsv1_1','--tlsv1_2','--tlsv1_3','--sni',parsed.hostname,'--json_out',str(output),f'{parsed.hostname}:{parsed.port}{{{ip}}}'],event,180)
         payload=json.loads(output.read_text())
     checks=[];findings=[]
     for server in payload.get('server_scan_results',[]):
@@ -144,7 +146,7 @@ def tls(value,event,update):
                 records=[json.dumps({'supported':details.get('is_tls_version_supported'),'accepted_cipher_count':len(accepted)},indent=2)]
                 if name in ('tls_1_0_cipher_suites','tls_1_1_cipher_suites') and details.get('is_tls_version_supported'):
                     findings.append(finding('Legacy TLS protocol enabled','Medium',name+' is supported.','Disable TLS 1.0/1.1 after checking client compatibility.','tls-'+name,endpoint=value))
-            checks.append({'protocol':name,'query':value,'status':'ok' if successful else 'error','assessment':'Checked' if successful else 'Check failed','records':records,'error':None if successful else str(attempt.get('error_reason'))})
+            checks.append({'protocol':name,'query':value,'status':'ok' if successful else 'error','assessment':'Checked' if successful else 'Check failed','records':records,'error':None if successful else str(attempt.get('error_reason'))+' '+str(attempt.get('error_trace') or '')[:2000]})
     if not checks:raise RuntimeError('SSLyze returned no completed or failed checks.')
     return result(checks,findings,['TLS 1.0–1.3 and certificate checks only. Other SSLyze plugins are not included in this profile.','Certificate trust errors in the built-in self-signed lab are expected and remain real findings.'],tool={'name':'SSLyze','version':payload.get('sslyze_version','unknown')},coverage={'endpoint':value,'pinned_ip':ip})
 

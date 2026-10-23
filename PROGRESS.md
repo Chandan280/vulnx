@@ -30,3 +30,12 @@ Multi-user authentication/roles and worker isolation; PostgreSQL/FastAPI migrati
 ## Environment
 
 Earlier GitHub authentication, network, socket and browser blockers are resolved. The separate Codex-task interface still failed; development is proceeding directly in this repository. Work is not claimed to continue automatically after the active session ends.
+
+## Final local workflow verification and reset
+
+- Added typed-confirmation data reset with CSRF protection, active/queued-job rejection and serialized mutation handling. Deletes workspace records and generated evidence/cache while preserving tools.
+- Added in-app operating instructions, a combined app/lab launcher and full user guide.
+- 32 unit tests and frontend production build passed. Full real integration rerun passed all five profiles, 18 ZAP alert occurrences, four verified configuration fixes, NVD reference and PDF/JSON exports.
+- Initial TLS subcheck failure was preserved as partial; reduced-concurrency SSLyze mode passed focused and complete reruns.
+- User-requested data reset completed. API and database verified empty; validation evidence and NVD cache removed. Aggregate verification report retained in docs/TEST_REPORT.md and delivered with the user guide as a PDF.
+- Original expanded scope limitations remain documented; do not claim OS fingerprinting or external active scans are implemented.
