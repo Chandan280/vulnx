@@ -50,3 +50,9 @@ This is a local single-user capstone application, not a public multi-user securi
 - **TLS partial:** inspect the failed subcheck; retry once after checking the endpoint. Do not interpret it as safe.
 - **NVD unavailable:** retry later. Cached entries last 24 hours and are removed by Clear data.
 - **App unavailable after closing Terminal:** restart using the command above.
+
+## Analyze an individual email offline
+
+Choose **Email Analyzer** from the sidebar. Upload/drop `.eml` or `.txt`, or paste the full raw message with headers and body; select **Analyze Email**. Review message identity, reported SPF/DKIM/DMARC claims, delivery headers, URLs, attachment hashes and inert source. Select **Clear** to remove the message and results. Navigation away also clears this page's memory. No email is sent to the backend or saved to scan history.
+
+This does not verify DKIM signatures, validate authentication header provenance, run antivirus or check link reputation. A reported pass is a header claim, not a fresh security verification. For actual domain DNS records, continue using **Scans → Email configuration**.

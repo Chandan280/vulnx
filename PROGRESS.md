@@ -43,3 +43,9 @@ Earlier GitHub authentication, network, socket and browser blockers are resolved
 ## Reset session fix
 
 Fixed cross-port browser cookie collisions between local instances on 8787 and 8788. Session cookies now include the port; the frontend refreshes an expired mutation session once. Clear-data errors appear beside its button, active-job blocking is explicit, and surrounding confirmation whitespace is tolerated. 34 tests passed, including a real HTTP reset against an isolated temporary database; frontend build passed. Current user findings were preserved.
+
+## 24 October 2026 — email forensics workflow
+
+Added a separate browser-only Email Analyzer matching the supplied upload/paste → Analyze Email → Clear workflow. Supports common MIME decoding, authentication header claims with trust caveats, inert body/raw inspection, URL pattern indicators and attachment metadata/hashes. No email persistence, remote fetches or executable HTML. Existing DNS analyzer preserved.
+
+15 parser tests and 34 backend tests passed; production frontend built. Browser checks passed for paste, file picker, HTML treated as text, MIME attachment decoding/known SHA-256 and Clear removing results. Existing targets/findings were preserved. Drag-and-drop shares the same validated file-loading path but was not separately exercised with browser automation.

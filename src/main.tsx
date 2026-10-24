@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Activity, ArrowDownToLine, ArrowRight, Check, ChevronRight, CircleHelp, Clock3, Database, FileText, Fingerprint, Globe2, LayoutDashboard, Loader2, Plus, Radar, Search, Settings, ShieldCheck, ShieldAlert, Terminal, Wrench, X } from 'lucide-react';
+import { Activity, ArrowDownToLine, ArrowRight, Check, ChevronRight, CircleHelp, Clock3, Database, FileText, Fingerprint, Globe2, LayoutDashboard, Loader2, Mail, Plus, Radar, Search, Settings, ShieldCheck, ShieldAlert, Terminal, Wrench, X } from 'lucide-react';
 import './style.css';
+import EmailAnalyzer from './EmailAnalyzer';
 
 type Asset = {id:string;domain:string;label:string;created:string;kind:'domain'|'website'|'network'};
 type Finding = {id?:string;status?:string;note?:string;scan_id?:string;asset_id?:string;domain?:string;title:string;severity:string;confidence:string;protocol:string;evidence:string;remediation:string;rule_id:string;cve_records?:{id:string;source:string;description:string}[]};
@@ -10,7 +11,7 @@ type Scan = {id:string;asset_id:string;profile:string;ports:string;domain:string
 type Workspace = {assets:Asset[];scans:Scan[];findings:Finding[]};
 const profiles:Record<string,string>={email:'Email configuration',network:'Network inventory',web:'Website headers',tls:'TLS configuration',web_active:'ZAP active · local lab'};
 const kinds:Record<string,string>={email:'domain',network:'network',web:'website',tls:'website',web_active:'website'};
-type Page = 'Overview'|'Assets'|'Scans'|'Findings'|'Remediation'|'Reports'|'Settings';
+type Page = 'Email Analyzer'|'Overview'|'Assets'|'Scans'|'Findings'|'Remediation'|'Reports'|'Settings';
 let csrf = '';
 async function api(path:string, body?:unknown, retry=true) {
   const response = await fetch('/api/'+path, body === undefined ? {} : {method:'POST', headers:{'Content-Type':'application/json','X-VulnX-CSRF':csrf}, body:JSON.stringify(body)});
@@ -21,7 +22,7 @@ async function api(path:string, body?:unknown, retry=true) {
 }
 const time = (value:string) => new Date(value).toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
 const running = (scan:Scan) => ['running','queued'].includes(scan.status);
-const nav = [{name:'Overview',icon:LayoutDashboard},{name:'Assets',icon:Database},{name:'Scans',icon:Radar},{name:'Findings',icon:ShieldAlert},{name:'Remediation',icon:Wrench},{name:'Reports',icon:FileText}] as const;
+const nav = [{name:'Overview',icon:LayoutDashboard},{name:'Assets',icon:Database},{name:'Scans',icon:Radar},{name:'Findings',icon:ShieldAlert},{name:'Remediation',icon:Wrench},{name:'Reports',icon:FileText},{name:'Email Analyzer',icon:Mail}] as const;
 
 function App() {
   const [page,setPage]=useState<Page>('Overview');
@@ -115,9 +116,10 @@ function App() {
       <div className="sidebar-bottom"><div className="local-note"><ShieldCheck size={19}/><strong>Your workspace. Your data.</strong><p>Assessments are stored on this Mac. Nothing is uploaded to GitHub.</p></div><button className={page==='Settings'?'nav-link active':'nav-link'} onClick={()=>setPage('Settings')}><Settings size={18}/>Settings</button><div className="runner"><span className={connected?'dot green':'dot'}/><div>{connected?'Local API connected':loaded?'Local API disconnected':'Connecting to local API'}<small>Single-user · v0.2</small></div></div></div>
     </aside>
     <main inert={Boolean(modal||detail)}><header className="topbar"><div>Workspace <ChevronRight size={13}/> <span>{page}</span></div><span className="local-badge"><span className="dot"/> LOCAL DEPLOYMENT</span></header>
-    <div className="page-content"><div className="page-heading"><div><div className="eyebrow">VULNX / ASSESSMENT WORKSPACE</div><h1>{page==='Overview'?'Security overview':page}</h1><p>{({Overview:'Evidence you can inspect. Findings you can understand.',Assets:'Your approved domains, organized in one place.',Scans:'Real assessments. Visible coverage. Traceable outcomes.',Findings:'Inspect the evidence behind every observation.',Remediation:'Follow an issue from discovery to a verified repair.',Reports:'Assessment records, ready to review and share.',Settings:'Know what is installed, connected and ready.'})[page]}</p></div><div className="heading-actions"><button className="button secondary" onClick={()=>setPage('Reports')}><ArrowDownToLine size={15}/>Reports</button><button className="button primary" onClick={()=>openModal('asset')}><Plus size={16}/>Add target</button></div></div>
+    <div className="page-content"><div className="page-heading"><div><div className="eyebrow">VULNX / ASSESSMENT WORKSPACE</div><h1>{page==='Overview'?'Security overview':page}</h1><p>{({'Email Analyzer':'Inspect a raw email privately, right in your browser.',Overview:'Evidence you can inspect. Findings you can understand.',Assets:'Your approved domains, organized in one place.',Scans:'Real assessments. Visible coverage. Traceable outcomes.',Findings:'Inspect the evidence behind every observation.',Remediation:'Follow an issue from discovery to a verified repair.',Reports:'Assessment records, ready to review and share.',Settings:'Know what is installed, connected and ready.'})[page]}</p></div><div className="heading-actions"><button className="button secondary" onClick={()=>setPage('Reports')}><ArrowDownToLine size={15}/>Reports</button><button className="button primary" onClick={()=>openModal('asset')}><Plus size={16}/>Add target</button></div></div>
     {error&&<div role="alert" className="alert error"><ShieldAlert size={17}/>{error}<button aria-label="Dismiss error" onClick={()=>setError('')}><X size={16}/></button></div>}
     {!loaded&&<div className="alert"><Loader2 className="spin" size={16}/>Loading the local workspace…</div>}
+    {page==='Email Analyzer'&&<EmailAnalyzer/>}
     {page==='Overview'&&<>
       <div className="metrics">{[{title:'Approved assets',value:loaded?data.assets.length:'—',note:'Targets in your workspace',icon:Database},{title:'Open findings',value:loaded?openFindings.length:'—',note:'Deduplicated by target, profile and rule',icon:ShieldAlert},{title:'Assessments',value:loaded?data.scans.length:'—',note:'Includes incomplete and failed checks',icon:Activity},{title:'Verified fixes',value:loaded?findings.filter(f=>f.status==='verified_fixed').length:'—',note:'Comparable configuration checks only',icon:ShieldCheck}].map(({title,value,note,icon:Icon})=><section className="metric" key={title}><div>{title}<Icon size={17}/></div><strong>{value}</strong><small>{note}</small></section>)}</div>
       <section className="panel severity-summary"><div className="panel-heading"><h2><ShieldAlert size={17}/>Open findings by severity</h2><span className="count">Excludes verified fixes and dismissed findings</span></div><div className="severity-counts">{['Critical','High','Medium','Low','Info'].map(level=><div key={level}><span className={'severity '+level.toLowerCase()}>{level}</span><strong>{loaded?openFindings.filter(f=>f.severity===level).length:'—'}</strong></div>)}</div></section>

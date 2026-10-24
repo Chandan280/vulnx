@@ -1,6 +1,23 @@
 {
-  "name": "vulnx", "version": "0.2.0", "private": true, "type": "module",
-  "scripts": {"dev": "vite build --watch", "build": "tsc --noEmit && vite build", "start": ".venv/bin/python backend/server.py"},
-  "dependencies": {"react": "19.2.4", "react-dom": "19.2.4", "lucide-react": "1.17.0"},
-  "devDependencies": {"vite": "5.4.21", "typescript": "5.9.3", "@types/react": "19.2.15", "@types/react-dom": "19.2.3"}
+  "name": "vulnx",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "tsc --noEmit && vite build",
+    "start": ".venv/bin/python backend/server.py",
+    "test:email": "node --test tests/email_forensics.test.mjs"
+  },
+  "dependencies": {
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "lucide-react": "1.17.0"
+  },
+  "devDependencies": {
+    "vite": "5.4.21",
+    "typescript": "5.9.3",
+    "@types/react": "19.2.15",
+    "@types/react-dom": "19.2.3"
+  }
 }

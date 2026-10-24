@@ -1,0 +1,36 @@
+import React,{useRef,useState} from 'react';
+import {Mail,Upload,ShieldCheck,Search,X,FileText,Link,Paperclip,Loader2} from 'lucide-react';
+import {analyzeEmail,MAX_EMAIL_BYTES,type EmailAnalysis} from './emailForensics';
+
+export default function EmailAnalyzer(){
+ const [raw,setRaw]=useState(''),[fileName,setFileName]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[result,setResult]=useState<EmailAnalysis|null>(null),[drag,setDrag]=useState(false);
+ const input=useRef<HTMLInputElement>(null),generation=useRef(0);
+ function clear(){generation.current++;setRaw('');setFileName('');setResult(null);setError('');setBusy(false);if(input.current)input.current.value='';}
+ async function load(file?:File){if(!file)return;const current=++generation.current;setResult(null);setError('');setBusy(false);setRaw('');setFileName('');
+  if(!/\.(eml|txt)$/i.test(file.name)){setError('Choose a .eml or .txt email file.');return;}
+  if(file.size>MAX_EMAIL_BYTES){setError('Choose an email file smaller than 5 MB.');return;}
+  try{const text=await file.text();if(current===generation.current){setRaw(text);setFileName(file.name);}}catch{setError('This file could not be read. Try exporting it again.');}
+ }
+ async function analyze(){const current=++generation.current;setBusy(true);setError('');setResult(null);
+  try{const report=await analyzeEmail(raw);if(current===generation.current)setResult(report);}catch(e){if(current===generation.current)setError((e as Error).message);}finally{if(current===generation.current)setBusy(false);}
+ }
+ return <div className="email-analyzer"><section className="panel email-input"><div className="panel-heading"><h2><Mail size={19}/>Email Forensics Analyzer</h2><span className="email-private"><ShieldCheck size={14}/>Browser only</span></div><div className="panel-padding">
+  <p className="email-intro">Analyze headers, reported SPF / DKIM / DMARC results, URLs, attachments and raw source.</p>
+  <div className={'email-drop'+(drag?' dragging':'')} onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);if(e.dataTransfer.files.length!==1){setError('Drop one email file at a time.');return;}void load(e.dataTransfer.files[0]);}}>
+   <Upload size={28}/><h3>Upload Email</h3><p>Drop .eml / .txt here or choose a file</p><button className="button secondary" onClick={()=>input.current?.click()}><FileText size={15}/>Choose File</button><input ref={input} type="file" accept=".eml,.txt" aria-label="Choose email file" hidden onChange={e=>void load(e.target.files?.[0])}/><small>{fileName||'Up to 5 MB · processed on this device'}</small>
+  </div>
+  <label className="email-raw-label" htmlFor="raw-email">Or paste raw email content:</label><textarea id="raw-email" placeholder="Paste full raw email (headers + body)" value={raw} onChange={e=>{generation.current++;setBusy(false);setRaw(e.target.value);setFileName('');setResult(null);setError('');}} spellCheck={false}/>
+  {error&&<div className="alert error" role="alert">{error}</div>}<div className="email-actions"><button className="button primary" onClick={()=>void analyze()} disabled={busy||!raw.trim()}>{busy?<Loader2 size={16} className="spin"/>:<Search size={16}/>} {busy?'Analyzing…':'Analyze Email'}</button><button className="button secondary" onClick={clear}><X size={16}/>Clear</button></div>
+  <p className="footnote">Tip: use a full raw .eml message including headers. Email contents stay in page memory, are not stored in scan history, and are cleared when you leave this page or reload. Links and attachments are never opened.</p>
+ </div></section>
+ {result&&<div className="email-results"><div role="status" className="email-result-status"><ShieldCheck size={18}/>Analysis complete · {result.partCount} MIME parts · {result.urls.length} URLs · {result.attachments.length} attachments</div>
+ <section className="panel"><div className="panel-heading"><h2>Message overview</h2></div><dl className="email-summary">{Object.entries(result.summary).map(([name,value])=><React.Fragment key={name}><dt>{name}</dt><dd>{value}</dd></React.Fragment>)}</dl></section>
+ <section className="panel"><div className="panel-heading"><h2>Authentication claims</h2><span className="count">Not independently verified</span></div><div className="panel-padding"><p className="footnote">These are claims copied from Authentication-Results / ARC-Authentication-Results headers. Headers can be forged. This offline tool does not run DNS/SPF checks, verify DKIM signatures or validate ARC chains. Use Email configuration in Scans for live DNS records.</p>{result.authentication.map((a,i)=><details className="email-auth" key={i}><summary><strong>{a.method}</strong><span className="badge">Reported: {a.result}</span></summary><pre>{a.source}</pre></details>)}</div></section>
+ <section className="panel"><div className="panel-heading"><h2><Link size={17}/>Extracted URLs</h2><span className="count">No reputation lookup</span></div><div className="panel-padding">{!result.urls.length?<p>No HTTP(S) URLs extracted from decoded text parts.</p>:result.urls.map((u,i)=><div className="check-card" key={i}><strong>{u.host}</strong><pre>{u.url}</pre><p>{u.notes.join(' · ')||'No basic URL-pattern flags. This is not a safety verdict.'}</p></div>)}<p className="footnote">URL extraction is heuristic. Encoded, obfuscated or non-HTTP links can be missed.</p></div></section>
+ <section className="panel"><div className="panel-heading"><h2><Paperclip size={17}/>Attachments</h2><span className="count">Metadata and SHA-256 only</span></div><div className="panel-padding">{!result.attachments.length?<p>No attachments identified.</p>:result.attachments.map((a,i)=><article className="check-card" key={i}><h3>{a.name}</h3><p>{a.type} · {a.bytes.toLocaleString()} decoded bytes</p><pre>SHA-256: {a.sha256}</pre>{a.notes.map(n=><p key={n}>{n}</p>)}</article>)}<p className="footnote">No antivirus scan, archive extraction or execution. A hash does not establish whether a file is safe. Unencoded binary MIME parts may not preserve original bytes.</p></div></section>
+ <section className="panel"><div className="panel-heading"><h2>Delivery headers</h2></div><div className="panel-padding"><p className="footnote">Received headers in source order (usually newest first). These are unverified header claims.</p>{result.received.length?result.received.map((r,i)=><pre key={i}>{i+1}. {r}</pre>):<p>No Received headers present.</p>}</div></section>
+ <section className="panel"><div className="panel-heading"><h2>Source inspection</h2></div><div className="panel-padding"><details><summary>All headers ({result.headers.length})</summary><pre>{result.headers.map(h=>h.name+': '+h.value).join('\n')}</pre></details>{result.bodies.map((b,i)=><details key={i}><summary>Decoded {b.type} part {i+1} · displayed as inert text</summary><pre>{b.text}</pre></details>)}<details><summary>Full raw source</summary><pre>{raw}</pre></details></div></section>
+ {result.warnings.length>0&&<section className="panel"><div className="panel-heading"><h2>Parsing limitations</h2></div><div className="panel-padding">{result.warnings.map((w,i)=><p key={i}>{w}</p>)}</div></section>}
+ </div>}
+ </div>;
+}

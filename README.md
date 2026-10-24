@@ -89,3 +89,11 @@ See PROGRESS.md for observed results. requirements.lock.txt records the complete
 Private repository: https://github.com/Chandan280/vulnx
 
 Source and tests are pushed after verified milestones. `.runtime/` (targets, evidence, database, reports, tools, generated lab keys), `.venv`, credentials and `.env` are excluded. GitHub stores source; it does not host the running app.
+
+## Offline email forensics
+
+Open **Email Analyzer** in the sidebar. Choose or drop one `.eml` / `.txt` file (up to 5 MB), or paste a full raw email; click **Analyze Email**. Inspect unfolded headers, encoded subjects, reported authentication claims, Received headers, decoded text/HTML source, HTTP(S) URLs, attachment metadata and SHA-256 hashes. **Clear** removes input and results. Leaving the page also discards them.
+
+Email contents are processed in browser memory, never sent to the API, stored in browser storage or added to assessment history. HTML is shown as inert text; URLs and attachments are never opened. This is an offline inspection tool, not independent SPF/DKIM/DMARC verification, an antivirus engine or a link-reputation service. Authentication-Results headers may be forged. Parsing supports common nested MIME, base64 and quoted-printable; malformed data and limits are surfaced. UTF-8 file reading may not preserve original unencoded binary parts; their hashes carry a warning. Live DNS configuration analysis remains in Scans → Email configuration.
+
+Run `npm run test:email` (Node 22.6+ with TypeScript stripping support; tested on Node 24) for the parser tests. `tests/fixtures/forensics-demo.eml` is explicitly synthetic test input, not seeded runtime data.
