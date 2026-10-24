@@ -56,3 +56,9 @@ This is a local single-user capstone application, not a public multi-user securi
 Choose **Email Analyzer** from the sidebar. Upload/drop `.eml` or `.txt`, or paste the full raw message with headers and body; select **Analyze Email**. Review message identity, reported SPF/DKIM/DMARC claims, delivery headers, URLs, attachment hashes and inert source. Select **Clear** to remove the message and results. Navigation away also clears this page's memory. No email is sent to the backend or saved to scan history.
 
 This does not verify DKIM signatures, validate authentication header provenance, run antivirus or check link reputation. A reported pass is a header claim, not a fresh security verification. For actual domain DNS records, continue using **Scans → Email configuration**.
+
+## White-and-purple interface and email result tabs
+
+The Email Analyzer shows one section at a time: Overview, Headers, Links, Attachments, Reputation and Raw Email. Use the tabs or Left/Right arrow keys; Home/End select the first/last tab. **Edit email** returns to the original input; **Clear** discards input and results. Attachment hashes are available in Attachments. Reputation explicitly states that it has not been checked; no invented score is displayed.
+
+If 8787 is occupied, run `.venv/bin/python scripts/start_local.py --port 8788` and open http://127.0.0.1:8788/. Add `--lab` if you need the training lab. The launcher checks port availability before starting processes and prints the selected URL.

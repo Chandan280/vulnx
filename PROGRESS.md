@@ -49,3 +49,11 @@ Fixed cross-port browser cookie collisions between local instances on 8787 and 8
 Added a separate browser-only Email Analyzer matching the supplied upload/paste → Analyze Email → Clear workflow. Supports common MIME decoding, authentication header claims with trust caveats, inert body/raw inspection, URL pattern indicators and attachment metadata/hashes. No email persistence, remote fetches or executable HTML. Existing DNS analyzer preserved.
 
 15 parser tests and 34 backend tests passed; production frontend built. Browser checks passed for paste, file picker, HTML treated as text, MIME attachment decoding/known SHA-256 and Clear removing results. Existing targets/findings were preserved. Drag-and-drop shares the same validated file-loading path but was not separately exercised with browser automation.
+
+## 24 October 2026 — minimal interface completion
+
+Replaced the dark palette with white surfaces and restrained purple accents. Email results now use Overview, Headers, Links, Attachments, Reputation and Raw Email tabs with arrow/Home/End keyboard navigation. Edit preserves input; Clear removes input/results. No fabricated risk score or reputation verdict.
+
+Production build, 15 email parser tests and 34 backend tests passed. Browser checks covered desktop overview, all six email sections, keyboard Right/Home navigation, Edit/reanalysis/Clear, and a 390px mobile result view with document width equal to viewport width. A clearly labelled synthetic email was used for UI verification and cleared afterwards; no assessment records were seeded. Full scanner integration was not rerun for this visual change; earlier integration evidence and scope limits still apply.
+
+Launcher now accepts --port, respects VULNX_PORT, prints the selected address and rejects occupied/invalid ports before starting processes. Actual startup on 8788 and occupied/invalid port rejection passed. User guide updated. Original unimplemented capabilities remain listed under Remaining scope.
