@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 import io
+import logging
+import signal
 import hashlib
 import json
 import mimetypes
@@ -22,9 +24,12 @@ from xml.sax.saxutils import escape
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from backend.checks import assess, domain_name, selector_name, Cancelled
 from backend import scope, scanners, intelligence
+from backend.runtime import data_directory, configured_port, database_lock, configure_logging
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA = ROOT / '.runtime'
+DATA = data_directory()
+LOGGER = logging.getLogger('vulnx')
+LOGGER.addHandler(logging.NullHandler())
 DB = DATA / 'vulnx.sqlite'
 TOKEN = secrets.token_urlsafe(32)
 POOL = ThreadPoolExecutor(max_workers=1)
@@ -188,8 +193,7 @@ def execute_scan(scan_id, domain, selector, event, profile='email', port_list='8
         status='timed_out' if isinstance(exc,TimeoutError) else 'failed'
         failure={'status':status,'checks':[{'protocol':profile,'status':'error','assessment':'Assessment could not finish','query':domain,'records':[],'error':str(exc)[:2000]}],'findings':[],'limitations':['No successful assessment result. No findings may be inferred from this failure.']}
         set_scan(scan_id, status=status, stage='Assessment could not finish', finished=now(),result=json.dumps(failure))
-        import traceback
-        traceback.print_exc()
+        LOGGER.error('Assessment %s failed (%s)', scan_id, type(exc).__name__)
     finally:
         with LOCK:
             EVENTS.pop(scan_id, None)
@@ -241,7 +245,22 @@ def pdf_report(scan):
     return buffer.getvalue()
 
 
+class LocalHTTPServer(ThreadingHTTPServer):
+    daemon_threads = False
+
+    def handle_error(self, request, client_address):
+        LOGGER.error('HTTP handler failed (%s)', sys.exc_info()[0].__name__)
+
+
 class Handler(BaseHTTPRequestHandler):
+    def setup(self):
+        super().setup()
+        self.connection.settimeout(15)
+
+    def log_message(self, format, *args):
+        # Do not log target paths, queries, credentials, or depend on terminal pipes.
+        LOGGER.info('HTTP request handled')
+
     def reply(self, code, body, content='application/json', cookie=False, download=None):
         raw = json.dumps(body).encode() if content == 'application/json' else body
         self.send_response(code)
@@ -402,16 +421,44 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(400, {'error': str(exc)})
 
 
-if __name__ == '__main__':
-    initialize()
-    backfill()
-    port = int(os.environ.get('VULNX_PORT', '8787'))
-    server = ThreadingHTTPServer(('127.0.0.1', port), Handler)
-    print(f'VulnX local workspace: http://127.0.0.1:{port}', flush=True)
+def main():
+    def stop_server(*_):
+        raise KeyboardInterrupt
+
+    server = None
     try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        for event in list(EVENTS.values()):
-            event.set()
-        server.server_close()
-        POOL.shutdown(wait=True)
+        port = configured_port()
+        with database_lock(DB):
+            configure_logging(DATA)
+            # Binding must succeed before recovery is allowed to mutate stored jobs.
+            server = LocalHTTPServer(('127.0.0.1', port), Handler)
+            try:
+                initialize()
+                backfill()
+                signal.signal(signal.SIGTERM, stop_server)
+                LOGGER.info('Local workspace started on port %s', port)
+                try:
+                    print(f'VulnX local workspace: http://127.0.0.1:{port}', flush=True)
+                except (OSError, ValueError):
+                    pass
+                server.serve_forever()
+            except KeyboardInterrupt:
+                pass
+            finally:
+                with LOCK:
+                    for event in list(EVENTS.values()):
+                        event.set()
+                # Keep database ownership until requests and all jobs have stopped.
+                server.server_close()
+                POOL.shutdown(wait=True)
+        return 0
+    except (OSError, ValueError, RuntimeError) as exc:
+        try:
+            print(str(exc), file=sys.stderr, flush=True)
+        except (OSError, ValueError):
+            pass
+        return 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

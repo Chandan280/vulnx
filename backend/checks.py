@@ -3,6 +3,7 @@ import ipaddress
 import re
 import shlex
 import subprocess
+from backend.email_validation import spf_syntax, dkim_key
 
 
 class Cancelled(Exception):
@@ -93,7 +94,7 @@ def assess(domain, selector, cancelled, update=lambda stage: None, resolver=look
             raise Cancelled()
         update('Querying ' + protocol)
         answer = resolver(name, cancelled)
-        relevant = [r for r in answer['records'] if prefix is None or r.lower().startswith(prefix)]
+        relevant = [r for r in answer['records'] if prefix is None or (re.match(r'^v=spf1(?: |$)',r,re.I) if protocol=='SPF' else re.match(r'^v=dmarc1(?:\s*;|$)',r,re.I))]
         check = {'protocol': protocol, 'query': name, **answer, 'assessment': 'Not assessed', 'resolver': 'Local controlled lab 127.0.0.1:15353' if name.endswith('.vulnx.test') else 'System DNS resolver'}
         checks.append(check)
         if answer['status'] == 'error':
@@ -113,6 +114,13 @@ def assess(domain, selector, cancelled, update=lambda stage: None, resolver=look
             if '=' in part:
                 key, val = part.split('=', 1)
                 tags[key.strip().lower()] = val.strip()
+        if protocol == 'SPF':
+            invalid,limits=spf_syntax(record)
+            if invalid:
+                check['assessment']='Malformed SPF record'
+                finding('SPF record malformed','Medium',protocol,record+'\n'+'; '.join(invalid),'Correct the listed SPF syntax errors, then rerun the DNS check.')
+            if limits:
+                check.update(status='error',error='; '.join(limits),assessment='SPF validation incomplete')
         if protocol == 'SPF' and any(t.lower() in ('all', '+all') for t in record.split()[1:]):
             finding('SPF permits every sender', 'High', protocol, record, 'Replace the permissive all mechanism with an appropriate policy after validating legitimate senders.')
         if protocol == 'DMARC':
@@ -122,12 +130,22 @@ def assess(domain, selector, cancelled, update=lambda stage: None, resolver=look
             elif policy == 'none':
                 finding('DMARC policy is monitoring only', 'Low', protocol, record, 'Review authentication reports, then consider quarantine or reject when legitimate mail is aligned. Monitoring can be intentional.')
         if protocol == 'DKIM':
+            tags,invalid,limits=dkim_key(record)
             if 'p' not in tags:
-                finding('DKIM public key missing', 'Medium', protocol, record, 'Confirm that this selector publishes a valid DKIM key record.')
-            elif not tags['p']:
+                check['assessment']='DKIM key missing'
+                finding('DKIM public key missing', 'Medium', protocol, record, 'Publish a valid DKIM key record for this selector.')
+            elif invalid:
+                check['assessment']='Malformed DKIM key record'
+                finding('DKIM key record malformed','Medium',protocol,record+'\n'+'; '.join(invalid),'Replace the malformed record with the public key supplied by your mail provider.')
+            elif not tags['p'].strip():
+                check['assessment']='DKIM selector revoked'
                 finding('DKIM selector key revoked', 'Info', protocol, record, 'An empty p= revokes this selector. Check whether it is intentionally retired and verify the active selector.')
+            elif not limits:
+                check['assessment']='DKIM public key structure checked; message signature not verified'
+            if limits:
+                check.update(status='error',error='; '.join(limits),assessment='DKIM validation incomplete')
     if not selector:
         checks.append({'protocol': 'DKIM', 'status': 'skipped', 'assessment': 'Selector required', 'records': [], 'query': None})
     errors = sum(c['status'] == 'error' for c in checks)
     attempted = sum(c['status'] != 'skipped' for c in checks)
-    return {'checks': checks, 'findings': findings, 'status': 'failed' if errors == attempted else 'partial' if errors else 'completed', 'limitations': ['Basic DNS configuration checks only; not an email delivery or authentication test.', 'SPF recursive lookup limits, full DKIM key cryptography, DMARC organizational-domain fallback and full standards validation are not yet implemented.', 'No CVE enrichment is performed for these configuration findings.']}
+    return {'checks': checks, 'findings': findings, 'status': 'failed' if errors == attempted else 'partial' if errors else 'completed', 'limitations': ['Basic DNS configuration checks only; not an email delivery or authentication test.', 'SPF recursive lookup limits and macro expansion, DKIM message-signature verification, DMARC organizational-domain fallback and full standards validation are not implemented. Key validation checks structure, not ownership or email authenticity.', 'No CVE enrichment is performed for these configuration findings.']}

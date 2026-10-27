@@ -1,8 +1,10 @@
 """Exercise actual HTTP APIs and scanner processes against the running local lab.
 
 Starts no external-target scans. Keeps the resulting real assessment history.
-Prerequisites: the VulnX API on 8787 and lab/server.py on its documented ports.
+Prerequisites: running VulnX API (VULNX_PORT or --port) and local lab.
 """
+import argparse
+import sys
 import http.cookiejar
 import json
 from pathlib import Path
@@ -11,7 +13,9 @@ import urllib.request
 import urllib.error
 
 ROOT=Path(__file__).resolve().parent.parent
-BASE='http://127.0.0.1:8787/api/'
+sys.path.insert(0,str(ROOT))
+from backend.runtime import configured_port, data_directory
+BASE=f'http://127.0.0.1:{configured_port()}/api/'
 opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 csrf=''
 
@@ -36,6 +40,11 @@ def scan(asset,profile,selector='',ports='18080,18443'):
 
 
 if __name__=='__main__':
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--port',type=int,default=configured_port())
+    args=parser.parse_args()
+    BASE=f'http://127.0.0.1:{configured_port(args.port)}/api/'
+    print('Verifying '+BASE,flush=True)
     csrf=call('session')['csrf']
     call('lab-mode',{'fixed':False})
     names=[('mail.vulnx.test','domain'),('http://127.0.0.1:18080/','website'),('https://127.0.0.1:18443/','website'),('127.0.0.1','network')]
@@ -58,7 +67,7 @@ if __name__=='__main__':
         results.append(item)
     intel=call('cve/CVE-2021-44228')
     assert intel['id']=='CVE-2021-44228' and intel['source'].startswith('https://nvd.nist.gov/')
-    output=ROOT/'.runtime/validation';output.mkdir(parents=True,exist_ok=True)
+    output=data_directory()/'validation';output.mkdir(parents=True,exist_ok=True)
     for fmt in ('json','pdf'):
         with opener.open(BASE+'reports/'+results[-1]['id']+'.'+fmt,timeout=30) as response:raw=response.read()
         if fmt=='pdf':assert raw.startswith(b'%PDF-')

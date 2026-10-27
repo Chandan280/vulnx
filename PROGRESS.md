@@ -1,5 +1,13 @@
 # VulnX progress — 23 October 2026 (Asia/Kolkata)
 
+## 27 October 2026 — reliability and correctness follow-up
+
+Reproduced response failure when the old request logger writes to a closed stderr pipe. Replaced terminal-dependent request/error logging with rotating file logging. Added OS-held single-instance database ownership before socket binding/recovery, lock retention through shutdown, crash-release tests and configured verification ports. Five new real-subprocess regression tests passed before the correctness work began.
+
+Nmap now distinguishes tool failure, incomplete/no-host coverage and completed observations. Email DNS checks reject malformed SPF mechanisms/addresses/prefixes and DKIM encoding/key structure; unsupported syntax/algorithms are explicitly incomplete. Added 18 correctness tests (11 email, 7 network). Final backend suite: 57 passed, zero failed; offline parser: 15 passed, zero failed; frontend production build passed. Fresh isolated API workflows using actual lab DNS and Nmap passed, including persistence and PDF/JSON exports. No user data changed. ZAP/TLS/full browser acceptance was not rerun in this follow-up.
+
+The old listeners on 8787/8788 still require a manual restart: process termination was denied and elevated termination was rejected by the environment approval policy. The fixed build was verified on fresh isolated instances. Authentication, deployment and Docker/Juice Shop remain unimplemented, as requested. GitHub account/visibility checks timed out, so this milestone has not been pushed. Detailed scope, estimates and unchanged scoring criteria are in docs/RELIABILITY_REVIEW_2026-10-27.md.
+
 ## Completed
 
 Local React app; actual email DNS, HTTP header, Nmap, SSLyze and active ZAP lab integrations; SQLite history; deduplicated findings/review states; comparable configuration retests; NVD lookup/CPE candidate matching; PDF/JSON reports; controlled vulnerable/corrected lab.

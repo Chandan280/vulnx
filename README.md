@@ -80,6 +80,14 @@ With app and lab running:
 .venv/bin/python scripts/verify_local.py
 ```
 
+For a different app port, use `.venv/bin/python scripts/verify_local.py --port 8788`, or set `VULNX_PORT=8788` for both startup and verification. The verifier does not discover an unrelated running process automatically.
+
+The backend takes an OS-held lock before startup recovery; a second backend using the same database exits even on a different port. Do not delete the lock file while a server is running. HTTP logging goes to rotating `.runtime/server.log`, so closing a launcher output pipe cannot prevent responses. `VULNX_DATA_DIR` overrides database/cache/log storage for isolated tests; installed tools and the shared local lab still use their documented project paths. Old processes started before this lock was implemented must be stopped before upgrading.
+
+Nmap tool completion does not establish target coverage: empty, timed-out, down, missing-port and filtered-only observations are partial. Valid closed-port observations can establish coverage without vulnerabilities. Email DNS checks validate bounded SPF mechanism syntax and DKIM key encoding/structure; unsupported SPF macros or DKIM algorithms are explicitly incomplete. These checks are not full SPF evaluation or message authentication.
+
+See `docs/RELIABILITY_REVIEW_2026-10-27.md` for the latest verification and deferred authentication/deployment plan.
+
 This exercises actual loopback DNS, HTTP, Nmap, TLS and ZAP through the app API, corrects the lab, verifies configuration fixes, retrieves an actual NVD record and downloads reports. It retains real assessment history locally and does not scan external assets. Unit-test fixtures never populate runtime data.
 
 See PROGRESS.md for observed results. requirements.lock.txt records the complete development environment; requirements.txt contains the smaller runtime set.

@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 import hashlib
 import http.client
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -57,7 +58,10 @@ def parse_nmap(xml):
     root=ET.fromstring(xml)
     hosts=[]
     for host in root.findall('host'):
-        item={'address':host.find('address').get('addr'),'status':host.find('status').get('state'),'services':[]}
+        address=host.find("address[@addrtype='ipv4']")
+        if address is None:address=host.find('address')
+        status=host.find('status')
+        item={'address':address.get('addr') if address is not None else None,'status':status.get('state') if status is not None else 'unknown','timedout':host.get('timedout')=='true','services':[], 'extraports':[dict(x.attrib) for x in host.findall('ports/extraports')]}
         for port in host.findall('ports/port'):
             service=port.find('service')
             item['services'].append({'port':int(port.get('portid')),'protocol':port.get('protocol'),'state':port.find('state').get('state'),'name':service.get('name','unknown') if service is not None else 'unknown','product':service.get('product','') if service is not None else '', 'version':service.get('version','') if service is not None else '', 'confidence':service.get('conf','') if service is not None else '', 'cpes':[x.text for x in service.findall('cpe')] if service is not None else []})
@@ -73,8 +77,29 @@ def network(value,port_list,event,update):
     update('Nmap: connecting to selected ports')
     xml=command(['nmap','-sT','-sV','--version-light','-Pn','-T3','--max-retries','1','--host-timeout','60s','-p',','.join(map(str,selected)),'-oX','-',target],event,180)
     hosts,version=parse_nmap(xml)
-    checks=[{'protocol':'Nmap','query':value,'status':'ok','assessment':'Port and service inventory complete','records':[json.dumps(h,indent=2) for h in hosts]}]
-    return result(checks,[],['Open ports are observations, not automatically vulnerabilities.','This unprivileged TCP profile does not perform OS fingerprinting, UDP scanning, brute force, or exploitation.','Product and version banners are fingerprints; no CVE applicability is inferred from names alone.'],tool={'name':'Nmap','version':version},hosts=hosts,coverage={'ports':selected,'target':target})
+    root=ET.fromstring(xml)
+    finished=root.find('runstats/finished')
+    if root.tag!='nmaprun' or finished is None or finished.get('exit')!='success':
+        raise RuntimeError('Nmap XML does not confirm successful tool completion.')
+    expected=ipaddress.ip_network(target).num_addresses
+    complete=[]; incomplete=[]
+    for host in hosts:
+        grouped=sum(int(x.get('count','0')) for x in host['extraports'])
+        covered=len(host['services'])+grouped
+        states={p['state'] for p in host['services']}|{p.get('state') for p in host['extraports']}
+        # -Pn labels hosts up without proving reachability. Filtered-only is indeterminate.
+        assessed=(host['status']=='up' and not host['timedout'] and covered==len(selected) and bool(states & {'open','closed'}))
+        (complete if assessed else incomplete).append(host)
+    addresses={h['address'] for h in hosts}
+    full=bool(hosts) and not incomplete and len(addresses)==expected
+    outcome='assessed' if full else 'no_hosts_observed' if not hosts else 'incomplete_or_unreachable'
+    assessment='Port and service inventory complete' if full else 'Nmap finished with no hosts observed; coverage not established' if not hosts else 'Incomplete or indeterminate host coverage; review observations'
+    checks=[{'protocol':'Nmap','query':value,'status':'ok' if full else 'error','assessment':assessment,'records':[json.dumps(h,indent=2) for h in hosts]}]
+    if not full:checks[0]['error']='No complete security conclusion: missing, timed-out, down or filtered-only host observations.'
+    report=result(checks,[],['Open ports are observations, not automatically vulnerabilities.','This unprivileged TCP profile does not perform OS fingerprinting, UDP scanning, brute force, or exploitation.','Product and version banners are fingerprints; no CVE applicability is inferred from names alone.','With -Pn, up is assumed. Filtered-only results do not prove host reachability.'],tool={'name':'Nmap','version':version},hosts=hosts,coverage={'ports':selected,'target':target,'outcome':outcome,'expected_addresses':expected,'observed_hosts':len(hosts),'assessed_hosts':len(complete),'complete':full})
+    report['status']='completed' if full else 'partial'
+    return report
+
 
 
 def web(value,event,update):

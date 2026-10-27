@@ -12,7 +12,8 @@ from datetime import datetime, timezone
 
 LOCK=threading.Lock()
 LAST_REQUEST=0.0
-CACHE=Path(__file__).resolve().parent.parent/'.runtime/nvd'
+from backend.runtime import data_directory
+CACHE=data_directory()/'nvd'
 
 
 def request_nvd(parameters):
