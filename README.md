@@ -2,7 +2,7 @@
 
 A local, evidence-based security assessment and remediation workspace with bcrypt/JWT accounts, built and tested on Apple Silicon. Runtime findings come from actual scanners; the application never seeds fake results.
 
-Latest status: **authentication is implemented and locally verified; cloud deployment and actual Docker execution are blocked by missing provider access/runtime.** See [current implementation report](docs/IMPLEMENTATION_2026-10-27.md). Older audit documents describe historical states.
+Latest status: **authentication is implemented and locally verified; cloud deployment lacks provider access. Docker Desktop is now installed, but this assistant environment cannot access its daemon socket or terminate the legacy processes.** See [Docker acceptance status](docs/DOCKER_ACCEPTANCE_STATUS.md) and [implementation report](docs/IMPLEMENTATION_2026-10-27.md). Older audit documents describe historical states.
 
 ## Start
 

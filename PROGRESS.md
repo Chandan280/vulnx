@@ -1,5 +1,9 @@
 # VulnX progress — 23 October 2026 (Asia/Kolkata)
 
+## 27 October 2026 — Docker Desktop installed; acceptance still blocked
+
+Docker CLI and Compose v5.6.1 found. Assistant daemon access is denied at the Docker Unix socket. Retried project cleanup: all old backend signals were denied; verified native fixture still owns 18080/18443. Added opt-in --include-lab to the scoped cleanup script and exact elevated Terminal instructions in docs/DOCKER_ACCEPTANCE_STATUS.md. No actual Docker build/start, original-workspace migration or browser acceptance was performed; score remains 20%. Do not treat the earlier native integration pass as container verification.
+
 ## 27 October 2026 — public review and remaining-work plan
 
 User explicitly requested public source visibility. Changed GitHub repository to PUBLIC and verified it; updated AGENTS.md to preserve this new instruction rather than revert to earlier privacy requirements. Source/evidence exclusions remain in place. Current local preview health returned HTTP 200; no cloud deployment exists. Added docs/REMAINING_WORK.md with done/partial/not-started status, estimates, unchanged checkpoint scores, prioritized deadline plan and newly identified proxy rate-limit risk. No application-code changes or new test run in this documentation-only update.
