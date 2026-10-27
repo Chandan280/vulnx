@@ -110,7 +110,7 @@ See PROGRESS.md for observed results. requirements.lock.txt records the complete
 
 ## Storage and GitHub
 
-Private repository: https://github.com/Chandan280/vulnx
+Public source repository for external review (requested 27 October 2026): https://github.com/Chandan280/vulnx
 
 Source and tests are pushed after verified milestones. `.runtime/` (targets, evidence, database, reports, tools, generated lab keys), `.venv`, credentials and `.env` are excluded. GitHub stores source; it does not host the running app.
 

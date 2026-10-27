@@ -1,5 +1,9 @@
 # VulnX progress — 23 October 2026 (Asia/Kolkata)
 
+## 27 October 2026 — public review and remaining-work plan
+
+User explicitly requested public source visibility. Changed GitHub repository to PUBLIC and verified it; updated AGENTS.md to preserve this new instruction rather than revert to earlier privacy requirements. Source/evidence exclusions remain in place. Current local preview health returned HTTP 200; no cloud deployment exists. Added docs/REMAINING_WORK.md with done/partial/not-started status, estimates, unchanged checkpoint scores, prioritized deadline plan and newly identified proxy rate-limit risk. No application-code changes or new test run in this documentation-only update.
+
 ## 27 October 2026 — authenticated implementation milestone
 
 Follow-up: implementation commit 0f5b4cf86213d58555f196ca0f4e769aafb4d917 was successfully pushed after reconnect; independently read remote main and local HEAD matched. Local authenticated preview health returned HTTP 200. Attempted a project-local, checksum-verified Lima installation to provide Docker without system changes; VM startup was denied while reading the boot session ID. Docker execution remains unverified due environment permissions, not merely an unattempted install.

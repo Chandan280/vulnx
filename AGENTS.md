@@ -2,7 +2,7 @@
 
 Build a real, local-first assessment platform. Never invent runtime findings, scan progress, CVE matches, environment readiness, or verification results. Fixtures belong only in tests.
 
-The user authorizes a private GitHub repository named vulnx in their authenticated personal account and commits/pushes after coherent verified changes. Verify account and repository visibility. Never force push or make public. If authentication/network access is blocked, continue locally and report that pushes are pending. Inspect staged changes and exclude secrets, scan targets/evidence, databases and reports. No paid services.
+The user explicitly requested PUBLIC visibility on 27 October 2026 so external reviewers can inspect the vulnx repository. Keep it public unless the user changes that instruction; do not restore the earlier private setting. Commits/pushes after coherent verified changes are authorized. Verify account and repository visibility. Never force push. If authentication/network access is blocked, continue locally and report that pushes are pending. Inspect staged changes and exclude secrets, scan targets/evidence, databases and generated assessment reports. No paid services.
 
 Visual direction: minimal white surfaces, restrained purple accents, readable typography, generous spacing. Keyboard accessibility and honest empty/error states are required.
 

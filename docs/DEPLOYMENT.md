@@ -10,7 +10,7 @@ Railway is selected for volume support, not as a promise of unlimited free compu
 
 ## Backend setup once account access exists
 
-1. Deploy this private repository using the root Dockerfile; one replica. It installs actual Nmap, DNS tools, Java, Python dependencies and checksum-verified ZAP 2.17.0. No frontend or fake findings are embedded in the backend image.
+1. Deploy this repository using the root Dockerfile; one replica. It installs actual Nmap, DNS tools, Java, Python dependencies and checksum-verified ZAP 2.17.0. No frontend or fake findings are embedded in the backend image.
 2. Attach a persistent Railway volume at `/data`. `VULNX_REQUIRE_PERSISTENT_STORAGE=1` fails startup if Railway's actual volume-mount variable is missing or mismatched. Startup repairs the dedicated data directory's ownership and drops to UID 10001 before serving. Container construction is unverified locally because Docker is absent.
 3. Set `VULNX_JWT_SECRET` to a cryptographically random secret of at least 32 characters. Keep it stable across restarts and out of Git. Set `VULNX_PUBLIC_ORIGIN` to the exact frontend HTTPS origin and `VULNX_ALLOWED_HOSTS` to the actual backend hostname. Backend binding is `0.0.0.0`; Railway `PORT` is respected.
 4. Set `VULNX_ALLOWED_TARGETS` to exact comma-separated canonical assets approved for this deployment. URL assets include scheme, explicit port and trailing slash as normalized by the app. Public signup is enabled, but an account cannot add or scan arbitrary targets outside this list. Do not add private provider infrastructure or metadata endpoints.
@@ -20,7 +20,7 @@ The server is still Python's threaded standard-library HTTP server, behind the p
 
 ## Frontend setup
 
-Deploy the same private repository to Vercel with Vite, `npm run build`, and output `dist`; set Node 22 or newer. Set `VULNX_API_ORIGIN` to the actual backend HTTPS origin. `api/[...path].js` forwards the same-origin `/api` requests to that configured backend, forwarding cookies and CSRF/origin headers and preserving PDF downloads and multiple Set-Cookie headers. It rejects non-HTTPS configuration and does not follow redirects. API responses are not cached. It contains no scan execution logic. Missing backend configuration returns an honest 503.
+Deploy the same repository to Vercel with Vite, `npm run build`, and output `dist`; set Node 22 or newer. Set `VULNX_API_ORIGIN` to the actual backend HTTPS origin. `api/[...path].js` forwards the same-origin `/api` requests to that configured backend, forwarding cookies and CSRF/origin headers and preserving PDF downloads and multiple Set-Cookie headers. It rejects non-HTTPS configuration and does not follow redirects. API responses are not cached. It contains no scan execution logic. Missing backend configuration returns an honest 503.
 
 Because browser requests remain same-origin, Secure HttpOnly SameSite=Strict JWT cookies work without relying on third-party cookies. The backend also supports only explicitly allowed CORS origins and credentials; no wildcard is used. Public HTTPS binding fails closed unless all required host/origin/secret/target settings are provided. The new proxy has three passing local tests; actual provider proxy/cookie behaviour remains unverified until deployed.
 
