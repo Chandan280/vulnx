@@ -11,3 +11,4 @@ reports/
 evidence/
 *.sqlite*
 .DS_Store
+.vercel/

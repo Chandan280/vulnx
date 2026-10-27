@@ -1,5 +1,11 @@
 # VulnX progress — 23 October 2026 (Asia/Kolkata)
 
+## 27 October 2026 — authenticated implementation milestone
+
+The initial push was repaired and independently verified: local and remote main matched 53b0f278ea8334d86db680c0cc60a3f1d270e4aa before proceeding. Repository privacy was restored to private after GitHub unexpectedly reported public visibility. Added bcrypt/JWT accounts, revocable sessions, ownership checks and backed-up admin migration; custom Docker lab definitions/admin lifecycle controls; Railway/Vercel deployment configuration; purple report styling and legacy-listener safeguards.
+
+74 backend tests, 15 email-parser tests, three API bridge tests and frontend build passed. Full real native-lab integration passed DNS, headers, Nmap, TLS and ZAP (19 alert occurrences), correction/retest, NVD and exports. Actual signup/DNS/finding/export, cross-account rejection, restart persistence and logout passed. Purple PDF rendered/inspected. Docker runtime is absent; cloud credentials are absent; no actual cloud deployment or Docker lifecycle pass claimed. Browser automation aborted in this restricted environment. Old processes still cannot be signalled; new original-workspace startup blocks before migration while they remain. Fresh authenticated preview runs at 8790 with separate data. See docs/IMPLEMENTATION_2026-10-27.md and docs/DEPLOYMENT.md for current status; older entries below are historical.
+
 ## 27 October 2026 — reliability and correctness follow-up
 
 Reproduced response failure when the old request logger writes to a closed stderr pipe. Replaced terminal-dependent request/error logging with rotating file logging. Added OS-held single-instance database ownership before socket binding/recovery, lock retention through shutdown, crash-release tests and configured verification ports. Five new real-subprocess regression tests passed before the correctness work began.

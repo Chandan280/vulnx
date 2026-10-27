@@ -1,0 +1,29 @@
+services:
+  lab:
+    build:
+      context: .
+      dockerfile: lab/Dockerfile
+    container_name: vulnx-training-lab
+    ports:
+      - "127.0.0.1:18080:18080"
+      - "127.0.0.1:18443:18443"
+      - "127.0.0.1:15353:15353/udp"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 1
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    volumes: ["lab-state:/app/.runtime/lab"]
+    networks: [lab-only]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18080/', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+networks:
+  lab-only:
+    internal: true
+volumes:
+  lab-state:

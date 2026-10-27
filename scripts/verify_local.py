@@ -46,6 +46,8 @@ if __name__=='__main__':
     BASE=f'http://127.0.0.1:{configured_port(args.port)}/api/'
     print('Verifying '+BASE,flush=True)
     csrf=call('session')['csrf']
+    credentials=json.loads((data_directory()/'bootstrap-admin.json').read_text())
+    csrf=call('auth/login',credentials)['csrf']
     call('lab-mode',{'fixed':False})
     names=[('mail.vulnx.test','domain'),('http://127.0.0.1:18080/','website'),('https://127.0.0.1:18443/','website'),('127.0.0.1','network')]
     existing=call('state')['assets']

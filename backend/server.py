@@ -1,4 +1,4 @@
-"""Single-user, loopback-only milestone server. Never expose to a public interface."""
+"""Authenticated single-process assessment API with explicit hosted configuration."""
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -23,8 +23,8 @@ from xml.sax.saxutils import escape
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from backend.checks import assess, domain_name, selector_name, Cancelled
-from backend import scope, scanners, intelligence
-from backend.runtime import data_directory, configured_port, database_lock, configure_logging
+from backend import scope, scanners, intelligence, auth, lab_control, deployment
+from backend.runtime import data_directory, configured_port, database_lock, configure_logging, refuse_legacy_listeners
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = data_directory()
@@ -54,7 +54,14 @@ def connection():
 
 
 def initialize():
-    DATA.mkdir(exist_ok=True, mode=0o700)
+    DATA.mkdir(parents=True,exist_ok=True, mode=0o700)
+    if DB.exists():
+        with sqlite3.connect(DB) as source:
+            legacy = source.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='assets'").fetchone() and not source.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='users'").fetchone()
+            backup = DATA / (DB.stem+'-before-auth.sqlite')
+            if legacy and not backup.exists():
+                fd=os.open(backup,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600);os.close(fd)
+                with sqlite3.connect(backup) as dest:source.backup(dest)
     with connection() as db:
         db.executescript('''CREATE TABLE IF NOT EXISTS assets(id TEXT PRIMARY KEY, domain TEXT UNIQUE, label TEXT, created TEXT);
         CREATE TABLE IF NOT EXISTS scans(id TEXT PRIMARY KEY, asset_id TEXT, domain TEXT, selector TEXT, status TEXT, stage TEXT, created TEXT, finished TEXT, result TEXT);
@@ -65,28 +72,43 @@ def initialize():
                 if name not in existing:db.execute(f'ALTER TABLE {table} ADD COLUMN {name} {definition}')
         db.executescript('''CREATE TABLE IF NOT EXISTS findings(id TEXT PRIMARY KEY,asset_id TEXT,signature TEXT,rule_id TEXT,profile TEXT,title TEXT,severity TEXT,confidence TEXT,evidence TEXT,remediation TEXT,endpoint TEXT,status TEXT,first_seen TEXT,last_seen TEXT,scan_id TEXT,note TEXT);
         CREATE TABLE IF NOT EXISTS occurrences(finding_id TEXT,scan_id TEXT,PRIMARY KEY(finding_id,scan_id));''')
+        auth.migrate(db, DATA)
         db.execute("UPDATE scans SET status='failed',stage='Interrupted by server restart',finished=? WHERE status IN ('running','queued')", (now(),))
 
 
-def audit(db, action, detail):
-    db.execute('INSERT INTO audit(action,detail,created) VALUES (?,?,?)', (action, detail, now()))
+def audit(db, action, detail, owner_id=auth.ADMIN_ID):
+    db.execute('INSERT INTO audit(action,detail,created,owner_id) VALUES (?,?,?,?)', (action, detail, now(), owner_id))
 
 
-def state():
+def state(owner_id=None):
     with connection() as db:
-        assets = [dict(r) for r in db.execute('SELECT * FROM assets ORDER BY created DESC')]
-        scans = [dict(r) for r in db.execute('SELECT * FROM scans ORDER BY created DESC')]
-        findings=[dict(r) for r in db.execute('SELECT f.*,a.domain FROM findings f JOIN assets a ON a.id=f.asset_id ORDER BY f.last_seen DESC')]
+        clause = ' WHERE a.owner_id=?' if owner_id else ''
+        args = (owner_id,) if owner_id else ()
+        assets = [dict(r) for r in db.execute('SELECT a.* FROM assets a'+clause+' ORDER BY a.created DESC',args)]
+        scans = [dict(r) for r in db.execute('SELECT s.* FROM scans s JOIN assets a ON a.id=s.asset_id'+clause+' ORDER BY s.created DESC',args)] if owner_id else [dict(r) for r in db.execute('SELECT * FROM scans ORDER BY created DESC')]
+        findings=[dict(r) for r in db.execute('SELECT f.*,a.domain FROM findings f JOIN assets a ON a.id=f.asset_id'+clause+' ORDER BY f.last_seen DESC',args)]
     for scan in scans:
         scan['result'] = json.loads(scan['result']) if scan['result'] else None
     return {'assets': assets, 'scans': scans, 'findings':findings}
 
 
-def clear_workspace(confirmation):
+def clear_workspace(confirmation, owner_id=None):
     """Serialize reset with job submission; never erase a live worker's records."""
     if confirmation != 'DELETE ALL DATA':
         raise ValueError('Type DELETE ALL DATA to confirm permanent removal.')
     with WORKSPACE_LOCK:
+        if owner_id:
+            with connection() as db:
+                owned = 'SELECT id FROM assets WHERE owner_id=?'
+                scan_ids = 'SELECT id FROM scans WHERE asset_id IN ('+owned+')'
+                if db.execute("SELECT 1 FROM scans WHERE status IN ('queued','running') AND asset_id IN ("+owned+')',(owner_id,)).fetchone():
+                    raise ValueError('Cancel or finish your assessments before clearing data.')
+                db.execute('DELETE FROM occurrences WHERE scan_id IN ('+scan_ids+')',(owner_id,))
+                for table in ('findings','scans'):
+                    db.execute('DELETE FROM '+table+' WHERE asset_id IN ('+owned+')',(owner_id,))
+                db.execute('DELETE FROM assets WHERE owner_id=?',(owner_id,))
+                db.execute('DELETE FROM audit WHERE owner_id=?',(owner_id,))
+            return {'ok':True,'note':'Your assessment data was removed. Your account and other users were preserved.'}
         with LOCK:
             if EVENTS:
                 raise ValueError('Cancel or finish all assessments before clearing data.')
@@ -206,7 +228,8 @@ def pdf_report(scan):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, title='VulnX assessment', author='VulnX', leftMargin=45, rightMargin=45)
     styles = getSampleStyleSheet()
-    styles['Title'].textColor = colors.HexColor('#146b50')
+    for name in ('Title','Heading2','Heading3'):
+        styles[name].textColor = colors.HexColor('#7c3aed')
     story = []
     def p(text, style='BodyText'):
         story.append(Paragraph(escape(str(text)).replace('\n', '<br/>'), styles[style]))
@@ -241,7 +264,15 @@ def pdf_report(scan):
     p('Limitations', 'Heading2')
     for limitation in result.get('limitations', ['This assessment did not produce a result.']):
         p(limitation)
-    doc.build(story)
+    def footer(canvas,document):
+        canvas.saveState()
+        canvas.setStrokeColor(colors.HexColor('#ede9fe'))
+        canvas.line(45,37,document.pagesize[0]-45,37)
+        canvas.setFillColor(colors.HexColor('#6b6478'));canvas.setFont('Helvetica',8)
+        canvas.drawString(45,25,'VulnX | Evidence-based assessment | Review coverage and limitations')
+        canvas.drawRightString(document.pagesize[0]-45,25,str(document.page))
+        canvas.restoreState()
+    doc.build(story,onFirstPage=footer,onLaterPages=footer)
     return buffer.getvalue()
 
 
@@ -253,6 +284,23 @@ class LocalHTTPServer(ThreadingHTTPServer):
 
 
 class Handler(BaseHTTPRequestHandler):
+    def auth_cookie_name(self):
+        return 'vulnx_auth_' + str(self.server.server_port)
+
+    def current_user(self):
+        token = auth.cookie_value(self.headers, self.auth_cookie_name())
+        if not token:
+            return None
+        with connection() as db:
+            return auth.validate(db,token,auth.secret(DATA))
+
+    def require_user(self):
+        self.user = self.current_user()
+        if self.user:
+            return True
+        self.reply(401,{'error':'Sign in to access your workspace.','code':'authentication_required'})
+        return False
+
     def setup(self):
         super().setup()
         self.connection.settimeout(15)
@@ -269,9 +317,18 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Referrer-Policy', 'no-referrer')
+        origin=self.headers.get('Origin')
+        if origin and origin in deployment.allowed_origins(self.headers.get('Host','')):
+            self.send_header('Access-Control-Allow-Origin',origin)
+            self.send_header('Access-Control-Allow-Credentials','true')
+            self.send_header('Vary','Origin')
+            self.send_header('Access-Control-Allow-Methods','GET, POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers','Content-Type, X-VulnX-CSRF')
         self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         if cookie:
-            self.send_header('Set-Cookie', self.session_cookie_name() + '=' + TOKEN + '; HttpOnly; SameSite=Strict; Path=/')
+            self.send_header('Set-Cookie', self.session_cookie_name() + '=' + getattr(self,'csrf_value',TOKEN) + '; HttpOnly; SameSite=Strict; Path=/' + ('; Secure' if deployment.public_origin() else ''))
+        if hasattr(self,'auth_cookie'):
+            self.send_header('Set-Cookie',self.auth_cookie_name()+'='+self.auth_cookie+'; HttpOnly; SameSite=Strict; Path=/; Max-Age='+str(auth.TTL if self.auth_cookie else 0)+ ('; Secure' if deployment.public_origin() else ''))
         if download:
             self.send_header('Content-Disposition', 'attachment; filename="' + download + '"')
         self.end_headers()
@@ -283,29 +340,38 @@ class Handler(BaseHTTPRequestHandler):
 
     def allowed(self, mutation=False):
         host = self.headers.get('Host', '')
-        expected = '127.0.0.1:' + str(self.server.server_port)
-        if host not in (expected, 'localhost:' + str(self.server.server_port)):
-            self.reply(403, {'error': 'Loopback host required.'})
+        if host not in deployment.allowed_hosts(self.server.server_port):
+            self.reply(403, {'error': 'Host not allowed.'})
             return False
         origin = self.headers.get('Origin')
-        if origin and origin != 'http://' + host:
+        if origin and origin not in deployment.allowed_origins(host):
             self.reply(403, {'error': 'Cross-origin request rejected.'})
             return False
-        if mutation and (self.headers.get('X-VulnX-CSRF') != TOKEN or (self.session_cookie_name() + '=' + TOKEN) not in self.headers.get('Cookie', '').split('; ')):
+        user = self.current_user()
+        self.csrf_value = user['csrf'] if user else TOKEN
+        if mutation and (not secrets.compare_digest(self.headers.get('X-VulnX-CSRF',''),self.csrf_value) or auth.cookie_value(self.headers,self.session_cookie_name()) != self.csrf_value):
             self.reply(403, {'error': 'Refresh the local workspace session.', 'code': 'session_expired'})
             return False
         return True
 
     def do_GET(self):
+        if urlparse(self.path).path == '/api/health':
+            return self.reply(200,{'status':'ok'})
         if not self.allowed():
             return
         path = urlparse(self.path).path
         if path == '/api/session':
-            return self.reply(200, {'csrf': TOKEN}, cookie=True)
-        if path.startswith('/api/') and (self.session_cookie_name() + '=' + TOKEN) not in self.headers.get('Cookie', '').split('; '):
-            return self.reply(401, {'error': 'Open the local workspace first.'})
+            user = self.current_user()
+            return self.reply(200, {'csrf':self.csrf_value,'user':auth.public_user(user) if user else None}, cookie=True)
+        if path.startswith('/api/') and not self.require_user():
+            return
+        if path == '/api/auth/me':
+            return self.reply(200,auth.public_user(self.user))
+        if path == '/api/lab':
+            if self.user['role']!='admin':return self.reply(403,{'error':'Lab controls require an administrator.'})
+            return self.reply(200,lab_control.status())
         if path == '/api/state':
-            return self.reply(200, state())
+            return self.reply(200, state(self.user['id']))
         if path == '/api/readiness':
             util=__import__('importlib.util',fromlist=['find_spec'])
             return self.reply(200, {'dns':bool(shutil.which('dig')),'nmap':bool(shutil.which('nmap')),'tls':util.find_spec('sslyze') is not None,'zap':(ROOT/'.runtime/tools/ZAP_2.17.0/zap.sh').exists(),'pdf':util.find_spec('reportlab') is not None,'mode':'Single-user local workspace','network':'Installed dependencies only; actual outcomes are recorded by each assessment.'})
@@ -318,7 +384,7 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith('/api/reports/'):
             key = path.rsplit('/', 1)[-1]
             scan_id, _, fmt = key.partition('.')
-            scan = next((s for s in state()['scans'] if s['id'] == scan_id), None)
+            scan = next((s for s in state(self.user['id'])['scans'] if s['id'] == scan_id), None)
             if not scan:
                 return self.reply(404, {'error': 'Assessment not found.'})
             if scan['status'] in ('running', 'queued'):
@@ -346,6 +412,9 @@ class Handler(BaseHTTPRequestHandler):
         with WORKSPACE_LOCK:
             self.handle_post()
 
+    def do_OPTIONS(self):
+        if self.allowed():self.reply(204,b'',content='text/plain')
+
     def handle_post(self):
         if not self.allowed(mutation=True):
             return
@@ -357,23 +426,42 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 raise ValueError('Expected an object.')
             path = urlparse(self.path).path
+            if path in ('/api/auth/signup','/api/auth/login'):
+                with connection() as db:
+                    if not auth.rate_limit(db,self.client_address[0]):
+                        return self.reply(429,{'error':'Too many authentication attempts. Try again in 15 minutes.'})
+                with connection() as db:
+                    user = auth.register(db,body.get('email'),body.get('password')) if path.endswith('signup') else auth.login(db,body.get('email'),body.get('password'))
+                    if not user:
+                        return self.reply(401,{'error':'Invalid email or password.'})
+                    self.auth_cookie,self.csrf_value = auth.issue(db,user,auth.secret(DATA))
+                return self.reply(201 if path.endswith('signup') else 200,{'user':auth.public_user(user),'csrf':self.csrf_value},cookie=True)
+            if not self.require_user():
+                return
+            if path == '/api/auth/logout':
+                with connection() as db:
+                    db.execute('UPDATE auth_sessions SET revoked=1 WHERE id=?',(self.user['session_id'],))
+                self.auth_cookie='';self.csrf_value=TOKEN
+                return self.reply(200,{'ok':True,'csrf':TOKEN},cookie=True)
             if path == '/api/workspace/clear':
-                return self.reply(200,clear_workspace(body.get('confirmation')))
+                return self.reply(200,clear_workspace(body.get('confirmation'),self.user['id']))
             if path == '/api/assets':
                 if body.get('authorized') is not True:
                     raise ValueError('Confirm that this target is authorized.')
                 kind=str(body.get('kind','domain'))
                 domain = scope.target(str(body.get('domain', '')),kind)
+                if not deployment.target_allowed(domain):return self.reply(403,{'error':'This target is not enabled by the deployment administrator.'})
                 label = str(body.get('label', '')).strip()[:80] or domain
                 with connection() as db:
-                    db.execute('INSERT INTO assets(id,domain,label,created,kind) VALUES (?,?,?,?,?)', (str(uuid4()), domain, label, now(),kind))
-                    audit(db, 'asset_added', domain)
+                    db.execute('INSERT INTO assets(id,domain,label,created,kind,owner_id) VALUES (?,?,?,?,?,?)', (str(uuid4()), domain, label, now(),kind,self.user['id']))
+                    audit(db, 'asset_added', domain,self.user['id'])
                 return self.reply(201, {'ok': True})
             if path == '/api/scans':
                 with connection() as db:
-                    asset = db.execute('SELECT * FROM assets WHERE id=?', (str(body.get('asset_id')),)).fetchone()
+                    asset = db.execute('SELECT * FROM assets WHERE id=? AND owner_id=?', (str(body.get('asset_id')),self.user['id'])).fetchone()
                     if not asset:
-                        raise ValueError('Select an existing approved asset.')
+                        return self.reply(404,{'error':'Asset not found.'})
+                    if not deployment.target_allowed(asset['domain']):return self.reply(403,{'error':'This target is not enabled by the deployment administrator.'})
                     if db.execute("SELECT count(*) FROM scans WHERE status IN ('queued','running')").fetchone()[0] >= 10:
                         raise ValueError('Queue is full. Wait for a scan to finish.')
                     profile=str(body.get('profile','email'))
@@ -382,7 +470,7 @@ class Handler(BaseHTTPRequestHandler):
                     selector = selector_name(str(body.get('selector', '')).strip()) if profile=='email' else ''
                     scan_id = str(uuid4())
                     db.execute('INSERT INTO scans(id,asset_id,domain,selector,status,stage,created,finished,result,profile,ports,retest_of) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', (scan_id, asset['id'], asset['domain'], selector, 'queued', 'Waiting for local worker', now(), None, None,profile,port_list,None))
-                    audit(db, 'scan_queued', scan_id)
+                    audit(db, 'scan_queued', scan_id,self.user['id'])
                 event = threading.Event()
                 with LOCK:
                     EVENTS[scan_id] = event
@@ -394,29 +482,37 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError('Use a supported review state. Verified fixes require a successful comparable retest.')
                 if status in ('accepted_risk','false_positive') and not note:raise ValueError('Record the reason for this decision.')
                 with connection() as db:
-                    if not db.execute('SELECT id FROM findings WHERE id=?',(key,)).fetchone():raise ValueError('Finding not found.')
-                    db.execute('UPDATE findings SET status=?,note=? WHERE id=?',(status,note,key));audit(db,'finding_status_changed',key+':'+status)
+                    if not db.execute('SELECT f.id FROM findings f JOIN assets a ON a.id=f.asset_id WHERE f.id=? AND a.owner_id=?',(key,self.user['id'])).fetchone():return self.reply(404,{'error':'Finding not found.'})
+                    db.execute('UPDATE findings SET status=?,note=? WHERE id=?',(status,note,key));audit(db,'finding_status_changed',key+':'+status,self.user['id'])
                 return self.reply(200,{'ok':True})
-            if path=='/api/lab-mode':
+            if path in ('/api/lab','/api/lab-mode'):
+                if self.user['role']!='admin':return self.reply(403,{'error':'Lab controls require an administrator.'})
+                if deployment.public_origin():return self.reply(403,{'error':'Container controls are local-only; no cloud Docker socket is exposed.'})
+                with connection() as db:
+                    if db.execute("SELECT 1 FROM scans WHERE status IN ('queued','running')").fetchone():return self.reply(409,{'error':'Finish or cancel scans before changing the shared lab.'})
+                if path=='/api/lab':
+                    try:return self.reply(200,lab_control.lifecycle(body.get('action')))
+                    except (RuntimeError,OSError,__import__('subprocess').TimeoutExpired) as exc:return self.reply(503,{'error':str(exc)})
                 fixed=body.get('fixed')
                 if not isinstance(fixed,bool):raise ValueError('Choose vulnerable or corrected lab mode.')
-                marker=ROOT/'.runtime/lab/fixed';marker.parent.mkdir(parents=True,exist_ok=True)
-                if fixed:marker.touch()
-                else:marker.unlink(missing_ok=True)
-                return self.reply(200,{'fixed':fixed})
+                try:engine=lab_control.set_mode(fixed)
+                except (RuntimeError,OSError,__import__('subprocess').TimeoutExpired) as exc:return self.reply(503,{'error':str(exc)})
+                return self.reply(200,{'fixed':fixed,'engine':engine})
             if path.startswith('/api/cancel/'):
                 scan_id = path.rsplit('/', 1)[-1]
+                with connection() as db:
+                    if not db.execute('SELECT s.id FROM scans s JOIN assets a ON a.id=s.asset_id WHERE s.id=? AND a.owner_id=?',(scan_id,self.user['id'])).fetchone():return self.reply(404,{'error':'Assessment not found.'})
                 with LOCK:
                     event = EVENTS.get(scan_id)
                     if not event:
                         return self.reply(409, {'error': 'Assessment is already finished.'})
                     event.set()
                 with connection() as db:
-                    audit(db, 'scan_cancel_requested', scan_id)
+                    audit(db, 'scan_cancel_requested', scan_id,self.user['id'])
                 return self.reply(200, {'ok': True})
             self.reply(404, {'error': 'Unknown endpoint.'})
         except sqlite3.IntegrityError:
-            self.reply(409, {'error': 'That domain is already in your assets.'})
+            self.reply(409, {'error': 'That account or asset already exists.'})
         except (ValueError, TypeError, UnicodeError) as exc:
             self.reply(400, {'error': str(exc)})
 
@@ -428,10 +524,12 @@ def main():
     server = None
     try:
         port = configured_port()
+        deployment.validate(DATA)
         with database_lock(DB):
+            refuse_legacy_listeners(DATA)
             configure_logging(DATA)
             # Binding must succeed before recovery is allowed to mutate stored jobs.
-            server = LocalHTTPServer(('127.0.0.1', port), Handler)
+            server = LocalHTTPServer((deployment.bind_address(), port), Handler)
             try:
                 initialize()
                 backfill()

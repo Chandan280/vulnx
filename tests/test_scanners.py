@@ -45,7 +45,7 @@ class RetestTests(unittest.TestCase):
         self.db=patch.object(server,'DB',Path(self.tmp.name)/'test.sqlite');self.db.start()
         server.initialize()
         with server.connection() as db:
-            db.execute('INSERT INTO assets VALUES (?,?,?,?,?)',('a','http://127.0.0.1:18080/','Lab',server.now(),'website'))
+            db.execute("INSERT INTO assets(id,domain,label,created,kind,owner_id) VALUES (?,?,?,?,?,'migration-admin')",('a','http://127.0.0.1:18080/','Lab',server.now(),'website'))
 
     def tearDown(self):self.data.stop();self.db.stop();self.tmp.cleanup()
 

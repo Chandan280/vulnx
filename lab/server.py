@@ -4,6 +4,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import html
 import json
+import os
 import socketserver
 import sqlite3
 import ssl
@@ -77,12 +78,13 @@ class DNS(socketserver.BaseRequestHandler):
 
 if __name__=='__main__':
     certificate()
-    http=ThreadingHTTPServer(('127.0.0.1',18080),Web)
-    https=ThreadingHTTPServer(('127.0.0.1',18443),Web)
+    bind=os.environ.get('VULNX_LAB_BIND','127.0.0.1')
+    http=ThreadingHTTPServer((bind,18080),Web)
+    https=ThreadingHTTPServer((bind,18443),Web)
     context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);context.load_cert_chain(DATA/'cert.pem',DATA/'key.pem');https.socket=context.wrap_socket(https.socket,server_side=True)
-    dns_server=socketserver.ThreadingUDPServer(('127.0.0.1',15353),DNS)
+    dns_server=socketserver.ThreadingUDPServer((bind,15353),DNS)
     for server in (http,https,dns_server):threading.Thread(target=server.serve_forever,daemon=True).start()
-    print('VulnX lab: HTTP 18080, TLS 18443, DNS 15353, all bound to 127.0.0.1. Ctrl+C stops.',flush=True)
+    print('VulnX custom lab: HTTP 18080, TLS 18443, DNS 15353, bound to '+bind+'. Ctrl+C stops.',flush=True)
     try:threading.Event().wait()
     except KeyboardInterrupt:
         for server in (http,https,dns_server):server.shutdown();server.server_close()

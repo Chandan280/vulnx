@@ -1,0 +1,10 @@
+.git
+.runtime
+.venv
+node_modules
+dist
+.env*
+reports
+evidence
+__pycache__
+*.sqlite*

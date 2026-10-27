@@ -1,6 +1,8 @@
 # VulnX
 
-A local, evidence-based security assessment and remediation workspace. **Version 0.2**, built and tested on Apple Silicon. Runtime findings come from actual scanners; the application never seeds fake results.
+A local, evidence-based security assessment and remediation workspace with bcrypt/JWT accounts, built and tested on Apple Silicon. Runtime findings come from actual scanners; the application never seeds fake results.
+
+Latest status: **authentication is implemented and locally verified; cloud deployment and actual Docker execution are blocked by missing provider access/runtime.** See [current implementation report](docs/IMPLEMENTATION_2026-10-27.md). Older audit documents describe historical states.
 
 ## Start
 
@@ -17,11 +19,17 @@ npm run build
 
 Open **http://127.0.0.1:8787**. Frontend and API share one origin. `npm run dev` rebuilds assets on change; refresh the page afterward. The ZAP installer downloads the pinned official 2.17.0 cross-platform release and verifies its SHA-256 digest before extraction (approximately 273 MiB). Tool downloads and runtime data are ignored by Git.
 
+Create an account in the sign-in screen. Passwords require at least 12 characters and at most 72 UTF-8 bytes. Accounts see only their own assets, scans, findings and reports. Logout revokes the server session immediately; JWT sessions expire after eight hours. Password recovery, email verification and MFA are not implemented.
+
+On first upgrade, the original SQLite file is backed up before migration. Existing assets belong to a generated migration admin (`admin@vulnx.local`); its random password is in `.runtime/bootstrap-admin.json` (mode 0600). Never commit or share that file. With `VULNX_DATA_DIR`, look there instead. No shared default password exists. The admin does not bypass other users' data ownership; its extra permission is managing the shared lab.
+
+If old servers remain on 8787/8788, startup refuses to migrate the original workspace. Run `.venv/bin/python scripts/stop_local.py` from a normal Mac Terminal, then start again. The script checks project cwd and Python listeners before sending SIGTERM; it never uses broad pkill or deletes data.
+
 ## Daily use and data reset
 
 After installation and building, start the app and lab together with `.venv/bin/python scripts/start_local.py --lab`. Keep the terminal open; Ctrl+C stops the processes. Settings includes an operating guide.
 
-Settings → Clear workspace data permanently removes stored targets, scans, findings, reviews, audit history, cached intelligence and generated validation evidence. Type `DELETE ALL DATA` to enable it. Active/queued scans block reset. Installed tools and lab configuration remain; separately downloaded reports and backups are outside its scope. Export reports first.
+Settings → Clear workspace data removes only the signed-in account's targets, scans, findings, reviews and audit rows. Type `DELETE ALL DATA` to enable it. That account's active/queued scans block reset. Accounts, other users' data, shared intelligence cache, tools, lab configuration, backups and separately exported files remain. Export reports first.
 
 See [User guide](docs/USER_GUIDE.md) and [Test report](docs/TEST_REPORT.md).
 
@@ -44,6 +52,10 @@ The deliberately vulnerable fixture binds only to loopback and contains no user 
 
 DNS queries under `.vulnx.test` go to the actual DNS fixture at `127.0.0.1:15353`; other domains use the system DNS resolver. Settings → Controlled local lab switches between vulnerable and corrected modes. Run a new assessment to measure the change. The TLS certificate remains intentionally self-signed.
 
+### Docker lab (custom fixture, not OWASP Juice Shop)
+
+With a Docker-compatible runtime and Compose v2 installed, an admin can use Settings → Attack Lab → Start / Stop / Reset. The same configuration can run with `docker compose -f compose.lab.yml -p vulnx-lab up -d --build --wait`. Stop any native fixture first to release its ports. Reset removes only the lab's named volume and container; application accounts/history are separate. The image uses a non-root user, read-only root filesystem, dropped capabilities, resource limits, internal network and loopback-only published ports. These settings were reviewed and controller tests passed, but actual container build/network isolation could not be exercised on the current Mac because Docker is absent. The real native fixture passed all scanner integrations.
+
 ## Implemented
 
 - Responsive React/TypeScript dashboard, readiness checks, assets, background jobs, cancellation and error states.
@@ -59,7 +71,7 @@ DNS queries under `.vulnx.test` go to the actual DNS fixture at `127.0.0.1:15353
 
 ## Coverage and deployment limits
 
-This is a **single-user, loopback-only application**. Accounts, roles, PostgreSQL and externally isolated workers are not implemented. Do not expose it publicly or reverse proxy it. Per-process sessions, CSRF tokens and host/origin checks protect the local browser workflow but are not multi-user authentication.
+The app now has bcrypt password hashing, JWT authentication, persistent revocable sessions and per-account ownership. It remains a single-process capstone with one scanner worker. PostgreSQL, distributed workers, email verification, password recovery and MFA are not implemented. Hosted configuration/manifests are prepared, but no live Vercel/Railway deployment has been verified. See [deployment instructions and blockers](docs/DEPLOYMENT.md); do not infer production readiness from passing local tests.
 
 Active ZAP scanning is restricted to `127.0.0.1:18080`; external approved websites support HTTP header and TLS profiles. ZAP is time bounded and does not prove every route/rule was exercised. Authenticated and arbitrary external active scans are not enabled.
 
@@ -71,6 +83,8 @@ Fix verification applies only to equivalent successful email and HTTP-configurat
 
 ```sh
 .venv/bin/python -m unittest discover -s tests -v
+npm run test:email
+node --test tests/api_proxy.test.mjs
 npm run build
 ```
 
@@ -89,6 +103,8 @@ Nmap tool completion does not establish target coverage: empty, timed-out, down,
 See `docs/RELIABILITY_REVIEW_2026-10-27.md` for the latest verification and deferred authentication/deployment plan.
 
 This exercises actual loopback DNS, HTTP, Nmap, TLS and ZAP through the app API, corrects the lab, verifies configuration fixes, retrieves an actual NVD record and downloads reports. It retains real assessment history locally and does not scan external assets. Unit-test fixtures never populate runtime data.
+
+The verifier authenticates using the admin credential file in the selected data directory. For disposable acceptance, run `.venv/bin/python scripts/verify_auth_live.py --full` with the native lab running. It starts an isolated backend, verifies all scanner profiles and signup/ownership/logout/restart/export behaviour, and stores evidence under ignored `.runtime/acceptance/`. It temporarily changes native lab mode and restores it on exit. Run without `--full` for the focused authenticated DNS workflow.
 
 See PROGRESS.md for observed results. requirements.lock.txt records the complete development environment; requirements.txt contains the smaller runtime set.
 

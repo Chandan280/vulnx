@@ -10,7 +10,7 @@ import time
 import unittest
 import urllib.request
 from unittest.mock import patch
-from backend.runtime import configured_port
+from backend.runtime import configured_port, refuse_legacy_listeners
 
 ROOT=Path(__file__).resolve().parent.parent
 
@@ -22,6 +22,13 @@ def free_port():
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_legacy_listener_blocks_default_workspace_before_migration(self):
+        with patch('backend.runtime.socket.socket') as sock:
+            sock.return_value.__enter__.return_value.connect_ex.return_value=0
+            with self.assertRaisesRegex(RuntimeError,'startup recovery/migration was not run'):
+                refuse_legacy_listeners(ROOT/'.runtime')
+            refuse_legacy_listeners(ROOT/'.runtime/isolated')
+
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory()
         self.data=Path(self.temp.name)

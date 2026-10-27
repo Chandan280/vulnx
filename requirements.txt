@@ -3,3 +3,5 @@ reportlab==5.1.0
 sslyze==6.3.1
 dnspython==2.9.0
 cryptography==46.0.7
+bcrypt==5.0.0
+PyJWT==2.15.1

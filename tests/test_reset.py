@@ -16,7 +16,7 @@ class ResetTests(unittest.TestCase):
         for p in self.patches:p.start()
         server.initialize()
         with server.connection() as db:
-            db.execute('INSERT INTO assets VALUES (?,?,?,?,?)',('a','mail.vulnx.test','Lab',server.now(),'domain'))
+            db.execute("INSERT INTO assets(id,domain,label,created,kind,owner_id) VALUES (?,?,?,?,?,'migration-admin')",('a','mail.vulnx.test','Lab',server.now(),'domain'))
             db.execute('INSERT INTO scans(id,status,asset_id) VALUES (?,?,?)',('s','completed','a'))
             server.audit(db,'test','private target')
         for folder in ('validation','nvd','tools'):
@@ -79,6 +79,9 @@ class ResetTests(unittest.TestCase):
             base='http://127.0.0.1:'+str(httpd.server_port)+'/api/'
             session=json.load(client.open(base+'session'))
             self.assertIn('vulnx_session_'+str(httpd.server_port),[c.name for c in jar])
+            credentials=json.loads((self.root/'bootstrap-admin.json').read_text())
+            login=urllib.request.Request(base+'auth/login',data=json.dumps(credentials).encode(),headers={'Content-Type':'application/json','X-VulnX-CSRF':session['csrf']})
+            session=json.load(client.open(login))
             request=urllib.request.Request(base+'workspace/clear',data=json.dumps({'confirmation':'DELETE ALL DATA'}).encode(),headers={'Content-Type':'application/json','X-VulnX-CSRF':session['csrf']})
             self.assertTrue(json.load(client.open(request))['ok'])
             self.assertEqual(json.load(client.open(base+'state')),{'assets':[],'scans':[],'findings':[]})
