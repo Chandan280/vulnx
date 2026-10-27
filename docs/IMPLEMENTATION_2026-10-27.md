@@ -8,6 +8,8 @@ Implemented bcrypt/JWT authentication and account ownership, a Docker definition
 
 Local HEAD was `53b0f278ea8334d86db680c0cc60a3f1d270e4aa`; direct `git ls-remote` showed remote main still at `2968b9be684a87f9861ab87fdeef330869d8a349`. Authentication was valid as Chandan280 and branch tracking was correct. GitHub unexpectedly reported the repository as public (zero forks/stars); restored it to private according to the user's original instruction before uploading. Retried ordinary `git push origin main`, then independently verified local HEAD and remote main both equalled `53b0f278ea8334d86db680c0cc60a3f1d270e4aa`. No force push or branch overwrite was used. Development resumed only after that match.
 
+After implementation, another connection drop interrupted push confirmation. On reconnect, direct remote inspection still showed 53b0f27. Retried the push and independently confirmed both local HEAD and remote main equalled **0f5b4cf86213d58555f196ca0f4e769aafb4d917**, the complete implementation milestone. The working tree was clean and repository privacy was reconfirmed. This subsequent documentation update records the outcome; source changes are no longer pending upload.
+
 ## Decisions and implementation
 
 ### Authentication
@@ -27,6 +29,8 @@ Selected the existing **custom VulnX fixture**, not OWASP Juice Shop. It already
 Added `lab/Dockerfile`, `compose.lab.yml`, fixed-command lifecycle controller and Settings → Attack Lab controls. Start/stop/reset require an admin. Mutations are blocked while scans run. Reset affects only the project's lab container/volume. Configuration includes a non-root user, read-only root filesystem, dropped capabilities, no-new-privileges, CPU/memory/PID limits, an internal network and localhost-only published ports. Corrected/vulnerable mode changes the real marker inside the running container, with native-fixture compatibility.
 
 Docker command and desktop/runtime are absent on this Mac. Controller regression tests and YAML parsing passed, but no image was built or container started. Runtime isolation, ports and reset therefore remain unverified. Do not present this as a demonstrated Docker lab or as Juice Shop. The real native fixture did pass all scanner profiles.
+
+Follow-up installation attempt: downloaded official Lima 2.2.1 for Apple Silicon into ignored `.runtime/container-runtime`, verified the archive against the release asset's SHA-256 digest, and confirmed its CLI version. Tried a dedicated Docker VM using temporary Lima storage, two CPUs, 2 GiB RAM, a 10 GiB disk limit and no host directory mounts. Startup failed with `failed to determine the boot session ID: operation not permitted`; a Rosetta/sysctl probe was also denied. No VM or Docker engine started. This establishes an execution-permission blocker beyond simply a missing binary; no paid service, privileged installation or permission bypass was used.
 
 ### Deployment
 
